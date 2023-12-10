@@ -1,6 +1,11 @@
 package node
 
-import "fmt"
+import (
+	"errors"
+	"fmt"
+
+	"github.com/google/uuid"
+)
 
 // RPC: Client to Participant transaction request. Forwards request to Coordinator.
 type ClientParticipantSendRequest struct {
@@ -25,7 +30,7 @@ func (n *Node) ClientParticipantSend(req *ParticipantCoordinatorSendRequest, res
 	var coordRes ParticipantCoordinatorSendResponse
 	err := n.p_coordinatorClient.Call("Node.ParticipantCoordinatorSend", &coordReq, &coordRes)
 	if err != nil {
-		return fmt.Errorf("error initiating send with coordinator: %v", err)
+		return fmt.Errorf("coordinator error: %v", err)
 	}
 	n.Print(fmt.Sprintf("Sent %v to %v", req.Amount, req.TargetAddr))
 	n.Print("----Transaction Request End----")
@@ -34,8 +39,9 @@ func (n *Node) ClientParticipantSend(req *ParticipantCoordinatorSendRequest, res
 
 // RPC: Prepare requset
 type ReceivePrepareRequest struct {
-	TargetAddr string
-	Amount     float64
+	TransactionID uuid.UUID
+	TargetAddr    string
+	Amount        float64
 }
 type ReceivePrepareResponse struct {
 	Response string
@@ -45,32 +51,41 @@ func (n *Node) ReceivePrepare(req *ReceivePrepareRequest, res *ReceivePrepareRes
 	if n.promisedCommit {
 		n.Print(fmt.Sprintf(colorRed + "Response: VoteAbort (already promised)" + colorReset))
 		res.Response = "VoteAbort"
-		return nil
+		n.LogTransaction("VoteAbort", req.TransactionID)
+		return errors.New("already promised")
 	}
 	n.promisedCommit = true
 	bal, err := n.getBalance()
 	if err != nil {
+		n.promisedCommit = false
 		n.Print(fmt.Sprintf(colorRed + "Response: VoteAbort (error getting balance)" + colorReset))
 		res.Response = "VoteAbort"
-		n.promisedCommit = false
+		n.LogTransaction("VoteAbort", req.TransactionID)
+		return err
 	}
 	if bal+req.Amount >= 0 {
 		n.Print(fmt.Sprintf(colorGreen + "Response: VoteCommit" + colorReset))
 		n.transactionAmount = req.Amount
 		res.Response = "VoteCommit"
+		n.LogTransaction("VoteCommit", req.TransactionID)
 		return nil
 	}
-	n.Print(fmt.Sprintf(colorRed + "Response: VoteAbort (unsufficient balance)" + colorReset))
 	n.promisedCommit = false
+	n.Print(fmt.Sprintf(colorRed + "Response: VoteAbort (insufficient balance)" + colorReset))
 	res.Response = "VoteAbort"
-	return nil
+	n.LogTransaction("VoteAbort", req.TransactionID)
+	return errors.New("insufficient balance")
 }
 
-type ReceiveCommitRequest struct{}
+type ReceiveCommitRequest struct {
+	TransactionID uuid.UUID
+}
 
-type ReceiveCommitResponse struct{}
+type ReceiveCommitResponse struct {
+}
 
 func (n *Node) ReceiveCommit(req *ReceiveCommitRequest, res *ReceiveCommitResponse) error {
+	n.LogTransaction("COMMIT", req.TransactionID)
 	n.Print(fmt.Sprintf(colorGreen + "Committing" + colorReset))
 	bal, err := n.getBalance()
 	if err != nil {
@@ -85,11 +100,15 @@ func (n *Node) ReceiveCommit(req *ReceiveCommitRequest, res *ReceiveCommitRespon
 	return nil
 }
 
-type ReceiveAbortRequest struct{}
+type ReceiveAbortRequest struct {
+	TransactionID uuid.UUID
+}
 
-type ReceiveAbortResponse struct{}
+type ReceiveAbortResponse struct {
+}
 
 func (n *Node) ReceiveAbort(req *ReceiveAbortRequest, res *ReceiveAbortResponse) error {
+	n.LogTransaction("ABORT", req.TransactionID)
 	n.Print(fmt.Sprintf(colorRed + "Aborting" + colorReset))
 	n.promisedCommit = false
 	return nil

@@ -94,22 +94,54 @@ type DepositResponse struct {
 
 // TODO: Replace with mini-cloud
 func (n *Node) Deposit(req *DepositRequest, res *DepositResponse) error {
-	// Check if the deposit amount is valid (non-negative)
 	if req.Amount < 0 {
 		return fmt.Errorf("cannot deposit negative")
 	}
 
 	// TODO: Read/write lock
-	// Read the current balance from the data file
 	currentBalance, err := n.getBalance()
 	if err != nil {
 		n.Print(fmt.Sprintf("Error reading current balance: %v", err))
 		return err
 	}
-	// Calculate the new balance after deposit
 	newBalance := currentBalance + req.Amount
 
-	// Write the new balance to the data file
+	err = n.WriteBalance(newBalance)
+	if err != nil {
+		n.Print(fmt.Sprintf("Error updating balance: %v", err))
+		return err
+	}
+
+	n.Print(fmt.Sprintf("Deposit %.2f successful. New balance: %.2f", req.Amount, newBalance))
+	return nil
+}
+
+type WithdrawRequest struct {
+	Amount float64
+}
+
+type WithdrawResponse struct {
+}
+
+// TODO: Replace with mini-cloud
+func (n *Node) Withdraw(req *WithdrawRequest, res *WithdrawResponse) error {
+	bal, err := n.getBalance()
+	if err != nil {
+		return err
+	}
+	if bal-req.Amount < 0 {
+		return fmt.Errorf("insufficient funds")
+	}
+
+	// TODO: Read/write lock
+	currentBalance, err := n.getBalance()
+	if err != nil {
+		n.Print(fmt.Sprintf("Error reading current balance: %v", err))
+		return err
+	}
+
+	newBalance := currentBalance - req.Amount
+
 	err = n.WriteBalance(newBalance)
 	if err != nil {
 		n.Print(fmt.Sprintf("Error updating balance: %v", err))

@@ -6,13 +6,15 @@ import (
 	"net/rpc"
 	"os"
 	"path/filepath"
+
+	"github.com/google/uuid"
 )
 
 const (
-	colorRed    = "\033[31m"
-	colorGreen  = "\033[32m"
-	colorBlue = "\033[34m"
-	colorReset  = "\033[0m"
+	colorRed   = "\033[31m"
+	colorGreen = "\033[32m"
+	colorBlue  = "\033[34m"
+	colorReset = "\033[0m"
 )
 
 type ConnectionData struct {
@@ -145,5 +147,58 @@ func (n *Node) GetInfo(req *GetInfoRequest, res *GetInfoResponse) error {
 	res.Name = n.Name
 	res.Addr = n.Addr
 	res.Type = n.Type
+	return nil
+}
+
+func (n *Node) LogTransaction(phase string, transactionID uuid.UUID) {
+	dir := "node_data"
+	filename := filepath.Join(dir, fmt.Sprintf("%s-%s.log", n.Type, n.Name))
+
+	// Check if the directory exists, create if not
+	if _, err := os.Stat(dir); os.IsNotExist(err) {
+		os.Mkdir(dir, 0755)
+	}
+
+	file, err := os.OpenFile(filename, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644) // 0644 permissions: readable by all, writable by the owner
+	if err != nil {
+		fmt.Printf("Error opening log file: %v\n", err)
+		return
+	}
+	defer file.Close()
+
+	logEntry := fmt.Sprintf("TID [%s] - %s\n", transactionID, phase)
+
+	if _, err := file.WriteString(logEntry); err != nil {
+		fmt.Printf("Error writing to log file: %v\n", err)
+	}
+}
+
+type ListParticipantsRequest struct{}
+type ListParticipantsResponse struct {
+	Names     []string
+	Addresses []string
+}
+
+func (n *Node) ListParticipants(req *ListParticipantsRequest, res *ListParticipantsResponse) error {
+	if n.Type != "Coordinator" {
+		n.Print("Requesting participant list from coordinator")
+		if n.p_coordinatorClient == nil {
+			return fmt.Errorf("coordinator client not set")
+		}
+		err := n.p_coordinatorClient.Call("Node.ListParticipants", &req, &res)
+		if err != nil {
+			return fmt.Errorf("failed to get participant list from coordinator: %v", err)
+		}
+	} else {
+		n.Print("Listing participants as coordinator")
+
+		res.Names = make([]string, 0, len(n.c_participantClients))
+		res.Addresses = make([]string, 0, len(n.c_participantClients))
+
+		for _, data := range n.c_participantClients {
+			res.Names = append(res.Names, data.Name)
+			res.Addresses = append(res.Addresses, data.Address)
+		}
+	}
 	return nil
 }
