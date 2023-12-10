@@ -246,6 +246,64 @@ func startClient() {
 					fmt.Printf("%d: %s - %s%s\n", i+1, name, address, selfLabel)
 				}
 			}
+		case "switch":
+			// Connect to a new server
+			if client != nil {
+				client.Close()
+			}
+			connectToServer()
+		case "bal":
+			fmt.Printf("Balance: %.2f\n", getBalance())
+		case "deposit":
+			if currentType != "Participant" {
+				fmt.Println("Deposit command is only available for participants.")
+				continue
+			}
+			if len(parts) != 2 {
+				fmt.Printf("Usage: deposit <amout>")
+				continue
+			}
+			amount, err := strconv.ParseFloat(parts[1], 64)
+			if err != nil {
+				fmt.Printf("Error parsing amount: %v", err)
+				continue
+			}
+			var req node.DepositRequest = node.DepositRequest{
+				Amount: amount,
+			}
+			var res node.DepositResponse
+			if err := client.Call("Node.Deposit", &req, &res); err != nil {
+				fmt.Printf("Error calling RPC method: %v\n", err)
+				continue
+			}
+			fmt.Printf("Deposited %.2f\n", amount)
+		case "withdraw":
+			if currentType != "Participant" {
+				fmt.Println("Withdraw command is only available for participants.")
+				continue
+			}
+			if len(parts) != 2 {
+				fmt.Printf("Usage: deposit <amout>")
+				continue
+			}
+			amount, err := strconv.ParseFloat(parts[1], 64)
+			if err != nil {
+				fmt.Printf("Error parsing amount: %v", err)
+				continue
+			}
+			if amount <= 0 {
+				fmt.Println("Invalid amount. Please enter a positive number.")
+				continue
+			}
+			var withdrawReq node.WithdrawRequest = node.WithdrawRequest{
+				Amount: amount,
+			}
+			var withdrawRes node.WithdrawResponse
+			if err := client.Call("Node.Withdraw", &withdrawReq, &withdrawRes); err != nil {
+				fmt.Printf("Error calling Withdraw RPC method: %v\n", err)
+				continue
+			}
+			fmt.Printf("Withdrew %.2f\n", amount)
 		case "send":
 			var listReq node.ListParticipantsRequest
 			var listRes node.ListParticipantsResponse
@@ -311,35 +369,6 @@ func startClient() {
 				continue
 			}
 			fmt.Printf("Sent %.2f from %s to %s\n", amount, currentName, targetName)
-
-		case "switch":
-			// Connect to a new server
-			if client != nil {
-				client.Close()
-			}
-			connectToServer()
-		case "bal":
-			fmt.Printf("Balance: %.2f\n", getBalance())
-		case "deposit":
-			// Deposit money
-			if len(parts) != 2 {
-				fmt.Printf("Usage: deposit <amout>")
-				continue
-			}
-			amt, err := strconv.ParseFloat(parts[1], 64)
-			if err != nil {
-				fmt.Printf("Error parsing amount: %v", err)
-				continue
-			}
-			var req node.DepositRequest = node.DepositRequest{
-				Amount: amt,
-			}
-			var res node.DepositResponse
-			if err := client.Call("Node.Deposit", &req, &res); err != nil {
-				fmt.Printf("Error calling RPC method: %v\n", err)
-				continue
-			}
-			fmt.Printf("Deposited %.2f\n", amt)
 		case "transaction":
 			// Get the list of participants
 			var listReq node.ListParticipantsRequest
@@ -352,7 +381,6 @@ func startClient() {
 				var operation string
 				var amount float64
 				var err error
-
 				if strings.HasPrefix(input, "+") {
 					operation = "add"
 					amount, err = strconv.ParseFloat(input[1:], 64)
@@ -365,7 +393,6 @@ func startClient() {
 				} else {
 					err = fmt.Errorf("invalid operation format")
 				}
-
 				return operation, amount, err
 			}
 			transactions := []node.Transaction{}
@@ -437,7 +464,6 @@ func startClient() {
 				}
 			}
 
-			// Package the transactions into the request
 			var req node.ClientParticipantTransactionRequest = node.ClientParticipantTransactionRequest{
 				Transactions: transactions,
 			}
