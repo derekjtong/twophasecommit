@@ -161,7 +161,6 @@ func startClient() {
 			fmt.Println("Invalid choice")
 			os.Exit(1)
 		}
-
 		selectedServer := servers[choice-1]
 		parts := strings.Split(selectedServer, ":")
 		if len(parts) < 3 {
@@ -170,7 +169,6 @@ func startClient() {
 		}
 		IPAddress := strings.TrimSpace(parts[len(parts)-2])
 		Port := strings.TrimSpace(parts[len(parts)-1])
-
 		fmt.Printf("Connecting to %s:%s...\n", IPAddress, Port)
 		client, err = rpc.Dial("tcp", fmt.Sprintf("%s:%s", IPAddress, Port))
 		if err != nil {
@@ -180,8 +178,8 @@ func startClient() {
 	}
 
 	connectToServer() // Initial connection
-	fmt.Println("Enter commands (get 'help' to see full options):")
 
+	fmt.Println("Enter commands (get 'help' to see full options):")
 	for {
 		fmt.Print("> ")
 		scanner.Scan()
@@ -231,7 +229,6 @@ func startClient() {
 				fmt.Printf("Invalid amount: %v\n", err)
 				continue
 			}
-
 			var req node.StartTransferRequest = node.StartTransferRequest{
 				TargetAddr: targetAddr,
 				Amount:     amount,
