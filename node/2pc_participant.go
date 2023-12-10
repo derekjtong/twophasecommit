@@ -8,31 +8,37 @@ import (
 )
 
 // RPC: Client to Participant transaction request. Forwards request to Coordinator.
-type ClientParticipantSendRequest struct {
-	TargetAddr string
-	TargetName string
-	Amount     float64
+type ClientParticipantTransactionRequest struct {
+	TargetAddr      string
+	TargetName      string
+	TargetOperation string
+	TargetAmount    float64
+	SelfOperation   string
+	SelfAmount      float64
 }
-type ClientParticipantSendResponse struct{}
+type ClientParticipantTransactionResponse struct{}
 
-func (n *Node) ClientParticipantSend(req *ParticipantCoordinatorSendRequest, res *ParticipantCoordinatorSendResponse) error {
+func (n *Node) ClientParticipantTransaction(req *ClientParticipantTransactionRequest, res *ClientParticipantTransactionResponse) error {
 	n.Print("----Transaction Request Start----")
 	if n.Type != "Participant" {
 		return fmt.Errorf("must be participant to send")
 	}
-	coordReq := ParticipantCoordinatorSendRequest{
-		TargetAddr: req.TargetAddr,
-		TargetName: req.TargetName,
-		Amount:     req.Amount,
-		SenderAddr: n.Addr,
-		SenderName: n.Name,
+	coordReq := ParticipantCoordinatorTransactionRequest{
+		TargetAddr:      req.TargetAddr,
+		TargetName:      req.TargetName,
+		TargetOperation: req.TargetOperation,
+		TargetAmount:    req.TargetAmount,
+		SenderAddr:      n.Addr,
+		SenderName:      n.Name,
+		SenderOperation: req.SelfOperation,
+		SenderAmount:    req.SelfAmount,
 	}
-	var coordRes ParticipantCoordinatorSendResponse
-	err := n.p_coordinatorClient.Call("Node.ParticipantCoordinatorSend", &coordReq, &coordRes)
+	var coordRes ParticipantCoordinatorTransactionResponse
+	err := n.p_coordinatorClient.Call("Node.ParticipantCoordinatorTransaction", &coordReq, &coordRes)
 	if err != nil {
 		return fmt.Errorf("coordinator error: %v", err)
 	}
-	n.Print(fmt.Sprintf("Sent %v to %v", req.Amount, req.TargetAddr))
+	n.Print(fmt.Sprintf("Sent %v to %v", req.TargetAmount, req.TargetAddr))
 	n.Print("----Transaction Request End----")
 	return nil
 }
@@ -40,8 +46,8 @@ func (n *Node) ClientParticipantSend(req *ParticipantCoordinatorSendRequest, res
 // RPC: Prepare requset
 type ReceivePrepareRequest struct {
 	TransactionID uuid.UUID
-	TargetAddr    string
 	Amount        float64
+	Operation     string
 }
 type ReceivePrepareResponse struct {
 	Response string
@@ -63,9 +69,18 @@ func (n *Node) ReceivePrepare(req *ReceivePrepareRequest, res *ReceivePrepareRes
 		n.LogTransaction("VoteAbort", req.TransactionID)
 		return err
 	}
-	if bal+req.Amount >= 0 {
+	var newBalance float64
+	switch req.Operation {
+	case "add":
+		newBalance = bal + req.Amount
+	case "multiply":
+		newBalance = bal * req.Amount
+	case "subtract":
+		newBalance = bal - req.Amount
+	}
+	if newBalance >= 0 {
 		n.Print(fmt.Sprintf(colorGreen + "Response: VoteCommit" + colorReset))
-		n.transactionAmount = req.Amount
+		n.transactionNewBalance = newBalance
 		res.Response = "VoteCommit"
 		n.LogTransaction("VoteCommit", req.TransactionID)
 		return nil
@@ -87,12 +102,8 @@ type ReceiveCommitResponse struct {
 func (n *Node) ReceiveCommit(req *ReceiveCommitRequest, res *ReceiveCommitResponse) error {
 	n.LogTransaction("COMMIT", req.TransactionID)
 	n.Print(fmt.Sprintf(colorGreen + "Committing" + colorReset))
-	bal, err := n.getBalance()
-	if err != nil {
-		fmt.Printf("Error getting balance: %v\n", err)
-	}
 
-	err = n.WriteBalance(bal + n.transactionAmount)
+	err := n.WriteBalance(n.transactionNewBalance)
 	if err != nil {
 		fmt.Printf("Error writing balance: %v\n", err)
 	}

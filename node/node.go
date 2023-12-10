@@ -32,9 +32,9 @@ type Node struct {
 	c_participantClients map[string]*ConnectionData
 
 	// Participant Related
-	p_coordinatorClient *rpc.Client
-	promisedCommit      bool
-	transactionAmount   float64
+	p_coordinatorClient   *rpc.Client
+	promisedCommit        bool
+	transactionNewBalance float64
 }
 
 func NewParticipant(addr string, name string) (*Node, error) {

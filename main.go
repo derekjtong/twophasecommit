@@ -287,13 +287,16 @@ func startClient() {
 				fmt.Println("Invalid amount")
 				continue
 			}
-			var req node.ClientParticipantSendRequest = node.ClientParticipantSendRequest{
-				TargetAddr: targetAddr,
-				TargetName: targetName,
-				Amount:     amount,
+			var req node.ClientParticipantTransactionRequest = node.ClientParticipantTransactionRequest{
+				TargetAddr:      targetAddr,
+				TargetName:      targetName,
+				TargetOperation: "add",
+				TargetAmount:    amount,
+				SelfOperation:   "subtract",
+				SelfAmount:      amount,
 			}
-			var res node.ClientParticipantSendResponse
-			if err := client.Call("Node.ClientParticipantSend", &req, &res); err != nil {
+			var res node.ClientParticipantTransactionResponse
+			if err := client.Call("Node.ClientParticipantTransaction", &req, &res); err != nil {
 				fmt.Printf("Error calling RPC method: %v\n", err)
 				continue
 			}

@@ -8,17 +8,20 @@ import (
 )
 
 // RPC: Participant to Coordinator transaction request
-type ParticipantCoordinatorSendRequest struct {
-	TargetAddr string
-	TargetName string
-	Amount     float64
-	SenderAddr string
-	SenderName string
+type ParticipantCoordinatorTransactionRequest struct {
+	TargetAddr      string
+	TargetName      string
+	TargetOperation string
+	TargetAmount    float64
+	SenderAddr      string
+	SenderName      string
+	SenderOperation string
+	SenderAmount    float64
 }
 
-type ParticipantCoordinatorSendResponse struct{}
+type ParticipantCoordinatorTransactionResponse struct{}
 
-func (n *Node) ParticipantCoordinatorSend(req *ParticipantCoordinatorSendRequest, res *ParticipantCoordinatorSendResponse) error {
+func (n *Node) ParticipantCoordinatorTransaction(req *ParticipantCoordinatorTransactionRequest, res *ParticipantCoordinatorTransactionResponse) error {
 	// Generate Transaction ID
 	transactionID := uuid.New()
 	n.Print(fmt.Sprintf("---Transaction ID: %s---", transactionID))
@@ -27,8 +30,8 @@ func (n *Node) ParticipantCoordinatorSend(req *ParticipantCoordinatorSendRequest
 
 	// Step 1: Prepare Phase
 	n.Print("---Prepare phase---")
-	errA := n.sendPrepare(req.SenderName, -req.Amount, transactionID)
-	errB := n.sendPrepare(req.TargetName, req.Amount, transactionID)
+	errA := n.sendPrepare(req.SenderName, req.SenderAmount, req.SenderOperation, transactionID)
+	errB := n.sendPrepare(req.TargetName, req.TargetAmount, req.TargetOperation, transactionID)
 
 	// Check if both participants are ready and no errors occurred
 	if errA != nil || errB != nil {
@@ -59,11 +62,12 @@ func (n *Node) ParticipantCoordinatorSend(req *ParticipantCoordinatorSendRequest
 }
 
 // Send prepare request
-func (n *Node) sendPrepare(name string, amount float64, transactionID uuid.UUID)error {
+func (n *Node) sendPrepare(name string, amount float64, operation string, transactionID uuid.UUID) error {
 	n.Print("Request: CanCommit?")
 	req := ReceivePrepareRequest{
 		TransactionID: transactionID,
 		Amount:        amount,
+		Operation:     operation,
 	}
 	var res ReceivePrepareResponse
 	client := n.c_participantClients[name].Client
