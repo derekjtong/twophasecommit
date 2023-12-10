@@ -141,57 +141,45 @@ func startServer() {
 }
 
 func startClient() {
-	servers, err := utils.ReadNodeInfoFromFile("nodes.txt")
-	if err != nil {
-		fmt.Printf("Error reading server info: %v\n", err)
-		os.Exit(1)
-	}
-	fmt.Println("Available servers:")
-	for i, server := range servers {
-		fmt.Printf("%d: %s\n", i+1, server)
-	}
-	fmt.Print("Choose a server to connect to: ")
-	var choice int
-	fmt.Scanln(&choice)
-	if choice < 1 || choice > len(servers) {
-		fmt.Println("Invalid choice")
-		os.Exit(1)
-	}
-
-	// Select server by number
-	selectedServer := servers[choice-1]
-	parts := strings.Split(selectedServer, ":")
-	if len(parts) < 3 {
-		fmt.Println("Invalid server format")
-		os.Exit(1)
-	}
-
-	// Second to last is IP address, last is port
-	IPAddress := strings.TrimSpace(parts[len(parts)-2])
-	Port := strings.TrimSpace(parts[len(parts)-1])
-
-	fmt.Printf("Connecting to %s:%s...\n", IPAddress, Port)
-	client, err := rpc.Dial("tcp", fmt.Sprintf("%s:%s", IPAddress, Port))
-	if err != nil {
-		fmt.Printf("Error dialing RPC server: %v\n", err)
-		os.Exit(1)
-	}
-	defer client.Close()
-
-	// Test the connection with a ping
-	var request node.PingRequest
-	var response node.PingResponse
-	if err := client.Call("Node.Ping", &request, &response); err != nil {
-		fmt.Printf("Error calling RPC method: %v\n", err)
-		os.Exit(1)
-	}
-	fmt.Printf("Connected to %v!\n", response.Name)
-
-	runCLI(client)
-}
-
-func runCLI(client *rpc.Client) {
+	var client *rpc.Client
 	scanner := bufio.NewScanner(os.Stdin)
+
+	connectToServer := func() {
+		servers, err := utils.ReadNodeInfoFromFile("nodes.txt")
+		if err != nil {
+			fmt.Printf("Error reading server info: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Println("Available servers:")
+		for i, server := range servers {
+			fmt.Printf("%d: %s\n", i+1, server)
+		}
+		fmt.Print("Choose a server to connect to: ")
+		var choice int
+		fmt.Scanln(&choice)
+		if choice < 1 || choice > len(servers) {
+			fmt.Println("Invalid choice")
+			os.Exit(1)
+		}
+
+		selectedServer := servers[choice-1]
+		parts := strings.Split(selectedServer, ":")
+		if len(parts) < 3 {
+			fmt.Println("Invalid server format")
+			os.Exit(1)
+		}
+		IPAddress := strings.TrimSpace(parts[len(parts)-2])
+		Port := strings.TrimSpace(parts[len(parts)-1])
+
+		fmt.Printf("Connecting to %s:%s...\n", IPAddress, Port)
+		client, err = rpc.Dial("tcp", fmt.Sprintf("%s:%s", IPAddress, Port))
+		if err != nil {
+			fmt.Printf("Error dialing RPC server: %v\n", err)
+			os.Exit(1)
+		}
+	}
+
+	connectToServer() // Initial connection
 	fmt.Println("Enter commands (get 'help' to see full options):")
 
 	for {
@@ -254,6 +242,11 @@ func runCLI(client *rpc.Client) {
 				continue
 			}
 			fmt.Println("Transfer request initiated.")
+		case "switch":
+			if client != nil {
+				client.Close()
+			}
+			connectToServer() // Connect to a new server
 		default:
 			fmt.Println("Unknown command:", input)
 		}
