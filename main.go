@@ -274,7 +274,7 @@ func startClient() {
 				fmt.Printf("Error calling RPC method: %v\n", err)
 				continue
 			}
-			fmt.Println("Send request initiated")
+			fmt.Printf("Sent %.2f to %s\n", amount, targetName)
 		case "switch":
 			// Connect to a new server
 			if client != nil {
