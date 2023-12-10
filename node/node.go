@@ -6,6 +6,7 @@ import (
 	"net/rpc"
 	"os"
 	"path/filepath"
+	"sync"
 )
 
 type Node struct {
@@ -16,6 +17,7 @@ type Node struct {
 	c_participantClients map[string]*rpc.Client
 	// Participant Related
 	p_coordinatorClient *rpc.Client
+	fileLock            sync.Mutex
 }
 
 func NewParticipant(addr string, name string) (*Node, error) {
@@ -57,6 +59,12 @@ func (n *Node) Start() {
 	file, err := os.Create(filepath)
 	if err != nil {
 		n.Print(fmt.Sprintf("Error creating data file: %v", err))
+		return
+	}
+	_, writeErr := file.WriteString("0")
+	if writeErr != nil {
+		n.Print(fmt.Sprintf("Error writing '0' to file: %v", writeErr))
+		file.Close() // Close the file in case of an error
 		return
 	}
 	file.Close()
@@ -102,5 +110,20 @@ type HealthCheckResponse struct {
 
 func (n *Node) HealthCheck(req *HealthCheckRequest, res *HealthCheckResponse) error {
 	res.Status = "OK"
+	return nil
+}
+
+type GetInfoRequest struct{}
+
+type GetInfoResponse struct {
+	Name string
+	Addr string
+	Type string
+}
+
+func (n *Node) GetInfo(req *GetInfoRequest, res *GetInfoResponse) error {
+	res.Name = n.Name
+	res.Addr = n.Addr
+	res.Type = n.Type
 	return nil
 }
