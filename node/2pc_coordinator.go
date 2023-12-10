@@ -1,6 +1,9 @@
 package node
 
-import "fmt"
+import (
+	"errors"
+	"fmt"
+)
 
 // RPC: Participant to Coordinator transaction request
 type ParticipantCoordinatorSendRequest struct {
@@ -14,7 +17,7 @@ type ParticipantCoordinatorSendResponse struct{}
 
 func (n *Node) ParticipantCoordinatorSend(req *ParticipantCoordinatorSendRequest, res *ParticipantCoordinatorSendResponse) error {
 	// Step 1: Prepare Phase
-	n.Print("Prepare phase")
+	n.Print("----Prepare phase----")
 	okA, errA := n.sendPrepare(req.SenderName, -req.Amount)
 	okB, errB := n.sendPrepare(req.TargetName, req.Amount)
 
@@ -42,7 +45,7 @@ func (n *Node) ParticipantCoordinatorSend(req *ParticipantCoordinatorSendRequest
 	}
 
 	// Step 2: Commit Phase
-	n.Print("Commit phase")
+	n.Print("----Commit phase----")
 	n.sendCommit(req.SenderName)
 	n.sendCommit(req.TargetName)
 
@@ -51,6 +54,7 @@ func (n *Node) ParticipantCoordinatorSend(req *ParticipantCoordinatorSendRequest
 
 // Send prepare request
 func (n *Node) sendPrepare(name string, amount float64) (bool, error) {
+	n.Print("Request: CanCommit?")
 	req := ReceivePrepareRequest{
 		Amount: amount,
 	}
@@ -62,11 +66,17 @@ func (n *Node) sendPrepare(name string, amount float64) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	return res.Ready, nil
+	if res.Response == "VoteAbort" {
+		return false, nil
+	} else if res.Response == "VoteCommit" {
+		return true, nil
+	}
+	return false, errors.New("received invalid response")
 }
 
 // Send commit
 func (n *Node) sendCommit(name string) {
+	n.Print("Request: DoCommit")
 	client := n.c_participantClients[name].Client
 	var req ReceiveCommitRequest
 	var res ReceiveCommitResponse
@@ -77,8 +87,9 @@ func (n *Node) sendCommit(name string) {
 }
 
 func (n *Node) sendRollback(name string) {
+	n.Print("Request: DoAbort")
 	client := n.c_participantClients[name].Client
-	var req ReceiveRollbackRequest
+	var req ReceiveAbortRequest
 	var res ReceiveCommitResponse
 	err := client.Call("Node.ReceiveRollback", &req, &res)
 	if err != nil {

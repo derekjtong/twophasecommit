@@ -11,7 +11,7 @@ type ClientParticipantSendRequest struct {
 type ClientParticipantSendResponse struct{}
 
 func (n *Node) ClientParticipantSend(req *ParticipantCoordinatorSendRequest, res *ParticipantCoordinatorSendResponse) error {
-	n.Print("----Transaction Request----")
+	n.Print("----Transaction Request Start----")
 	if n.Type != "Participant" {
 		return fmt.Errorf("must be participant to send")
 	}
@@ -27,7 +27,8 @@ func (n *Node) ClientParticipantSend(req *ParticipantCoordinatorSendRequest, res
 	if err != nil {
 		return fmt.Errorf("error initiating send with coordinator: %v", err)
 	}
-	n.Print(fmt.Sprintf("Sent %v to %v\n", req.Amount, req.TargetAddr))
+	n.Print(fmt.Sprintf("Sent %v to %v", req.Amount, req.TargetAddr))
+	n.Print("----Transaction Request End----")
 	return nil
 }
 
@@ -37,32 +38,31 @@ type ReceivePrepareRequest struct {
 	Amount     float64
 }
 type ReceivePrepareResponse struct {
-	Ready bool
+	Response string
 }
 
 func (n *Node) ReceivePrepare(req *ReceivePrepareRequest, res *ReceivePrepareResponse) error {
-	n.Print("Receive prepare")
 	if n.promisedCommit {
-		n.Print("Rejected, already promised")
-		res.Ready = false
+		n.Print(fmt.Sprintf(colorRed + "Response: VoteAbort (already promised)" + colorReset))
+		res.Response = "VoteAbort"
 		return nil
 	}
 	n.promisedCommit = true
 	bal, err := n.getBalance()
 	if err != nil {
-		n.Print(fmt.Sprintf("Error getting balance: %v", err))
-	}
-
-	if bal+req.Amount >= 0 {
-		n.Print("Accepted")
-		n.transactionAmount = req.Amount
-		res.Ready = true
-		return nil
-	} else {
-		n.Print("Rejected, balance too low")
+		n.Print(fmt.Sprintf(colorRed + "Response: VoteAbort (error getting balance)" + colorReset))
+		res.Response = "VoteAbort"
 		n.promisedCommit = false
-		res.Ready = false
 	}
+	if bal+req.Amount >= 0 {
+		n.Print(fmt.Sprintf(colorGreen + "Response: VoteCommit" + colorReset))
+		n.transactionAmount = req.Amount
+		res.Response = "VoteCommit"
+		return nil
+	}
+	n.Print(fmt.Sprintf(colorRed + "Response: VoteAbort (unsufficient balance)" + colorReset))
+	n.promisedCommit = false
+	res.Response = "VoteAbort"
 	return nil
 }
 
@@ -71,7 +71,7 @@ type ReceiveCommitRequest struct{}
 type ReceiveCommitResponse struct{}
 
 func (n *Node) ReceiveCommit(req *ReceiveCommitRequest, res *ReceiveCommitResponse) error {
-	n.Print("Receive commit")
+	n.Print(fmt.Sprintf(colorGreen + "Committing" + colorReset))
 	bal, err := n.getBalance()
 	if err != nil {
 		fmt.Printf("Error getting balance: %v\n", err)
@@ -85,13 +85,12 @@ func (n *Node) ReceiveCommit(req *ReceiveCommitRequest, res *ReceiveCommitRespon
 	return nil
 }
 
-type ReceiveRollbackRequest struct{}
+type ReceiveAbortRequest struct{}
 
-type ReceiveRollbackResponse struct{}
+type ReceiveAbortResponse struct{}
 
-func (n *Node) ReceiveRollback(req *ReceiveRollbackRequest, res *ReceiveRollbackResponse) error {
-	n.Print("Receive rollback")
-
+func (n *Node) ReceiveAbort(req *ReceiveAbortRequest, res *ReceiveAbortResponse) error {
+	n.Print(fmt.Sprintf(colorRed + "Aborting" + colorReset))
 	n.promisedCommit = false
 	return nil
 }

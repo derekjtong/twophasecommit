@@ -8,6 +8,13 @@ import (
 	"path/filepath"
 )
 
+const (
+	colorRed    = "\033[31m"
+	colorGreen  = "\033[32m"
+	colorBlue = "\033[34m"
+	colorReset  = "\033[0m"
+)
+
 type ConnectionData struct {
 	Name    string
 	Address string
@@ -18,8 +25,10 @@ type Node struct {
 	Name string
 	Addr string
 	Type string
+
 	// Coordinator Related
 	c_participantClients map[string]*ConnectionData
+
 	// Participant Related
 	p_coordinatorClient *rpc.Client
 	promisedCommit      bool
@@ -43,7 +52,13 @@ func NewCoordinator(addr string) (*Node, error) {
 }
 
 func (n *Node) Print(msg string) {
-	fmt.Printf("[%s-%s]: %s\n", n.Type, n.Name, msg)
+	if n.Type == "Participant" {
+		fmt.Printf("[%s-%s]: %s\n", n.Type, n.Name, msg)
+	} else if n.Type == "Coordinator" {
+		fmt.Printf(colorBlue+"[%s]: %s\n"+colorReset, n.Type, msg)
+	} else {
+		fmt.Printf(colorRed+"[??]: %s\n"+colorReset, msg)
+	}
 }
 
 func (n *Node) Start() {
