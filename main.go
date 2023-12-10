@@ -247,11 +247,6 @@ func startClient() {
 				}
 			}
 		case "send":
-			var bal float64 = getBalance()
-			if bal <= 0 {
-				fmt.Printf("Insufficient balance: %.2f\n", bal)
-				continue
-			}
 			var listReq node.ListParticipantsRequest
 			var listRes node.ListParticipantsResponse
 			if err := client.Call("Node.ListParticipants", &listReq, &listRes); err != nil {
@@ -285,7 +280,6 @@ func startClient() {
 				fmt.Println("Cannot send to self. Please select a different participant.")
 				continue
 			}
-			fmt.Printf("Balance: %.2f\n", bal)
 			var amount float64
 			fmt.Print("Enter the amount to send: ")
 			fmt.Scanln(&amount)
