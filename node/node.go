@@ -32,9 +32,11 @@ type Node struct {
 	c_participantClients map[string]*ConnectionData
 
 	// Participant Related
-	p_coordinatorClient   *rpc.Client
-	promisedCommit        bool
-	transactionNewBalance float64
+	p_coordinatorClient                *rpc.Client
+	promisedCommit                     bool
+	transactionNewBalance              float64
+	sleepBeforeRespondingToCoordinator bool
+	sleepAfterRespondingToCoordinator  bool
 }
 
 func NewParticipant(addr string, name string) (*Node, error) {
@@ -76,22 +78,23 @@ func (n *Node) Start() {
 		}
 	}
 
-	// Create a data file for node
-	filename := fmt.Sprintf("%s-%s.data", n.Type, n.Name)
-	filepath := filepath.Join(nodeDataDir, filename)
-	file, err := os.Create(filepath)
-	if err != nil {
-		n.Print(fmt.Sprintf("Error creating data file: %v", err))
-		return
+	if n.Type == "Participant" {
+		// Create a data file for node
+		filename := fmt.Sprintf("%s-%s.data", n.Type, n.Name)
+		filepath := filepath.Join(nodeDataDir, filename)
+		file, err := os.Create(filepath)
+		if err != nil {
+			n.Print(fmt.Sprintf("Error creating data file: %v", err))
+			return
+		}
+		_, writeErr := file.WriteString("0")
+		if writeErr != nil {
+			n.Print(fmt.Sprintf("Error writing '0' to file: %v", writeErr))
+			file.Close() // Close the file in case of an error
+			return
+		}
+		file.Close()
 	}
-	_, writeErr := file.WriteString("0")
-	if writeErr != nil {
-		n.Print(fmt.Sprintf("Error writing '0' to file: %v", writeErr))
-		file.Close() // Close the file in case of an error
-		return
-	}
-	file.Close()
-
 	// Start RPC
 	listener, err := net.Listen("tcp", n.Addr)
 	if err != nil {
@@ -151,7 +154,7 @@ func (n *Node) GetInfo(req *GetInfoRequest, res *GetInfoResponse) error {
 }
 
 func (n *Node) LogTransaction(phase string, transactionID uuid.UUID) {
-	dir := "node_data"
+	dir := "node_log"
 	filename := filepath.Join(dir, fmt.Sprintf("%s-%s.log", n.Type, n.Name))
 
 	// Check if the directory exists, create if not
