@@ -9,8 +9,6 @@ import (
 	"strings"
 	"twophasecommit/node"
 	"twophasecommit/utils"
-
-	"github.com/rivo/tview"
 )
 
 func main() {
@@ -23,8 +21,6 @@ func main() {
 		startServer()
 	} else if os.Args[1] == "client" {
 		startClient()
-	} else if os.Args[1] == "cool" {
-		coolClient()
 	} else {
 		fmt.Println("Usage: go run main.go [server|client]")
 		os.Exit(1)
@@ -248,125 +244,6 @@ func startClient() {
 				client.Close()
 			}
 			connectToServer() // Connect to a new server
-		default:
-			fmt.Println("Unknown command:", input)
-		}
-	}
-}
-
-func coolClient() {
-	var client *rpc.Client
-	scanner := bufio.NewScanner(os.Stdin)
-
-	connectToServer := func(server string) {
-		parts := strings.Split(server, ":")
-		if len(parts) < 3 {
-			fmt.Println("Invalid server format")
-			os.Exit(1)
-		}
-		IPAddress := strings.TrimSpace(parts[len(parts)-2])
-		Port := strings.TrimSpace(parts[len(parts)-1])
-		fmt.Printf("Connecting to %s:%s...\n", IPAddress, Port)
-		var err error
-		client, err = rpc.Dial("tcp", fmt.Sprintf("%s:%s", IPAddress, Port))
-		if err != nil {
-			fmt.Printf("Error dialing RPC server: %v\n", err)
-			os.Exit(1)
-		}
-	}
-
-	// Interactive server selection
-	selectServer := func() {
-		servers, err := utils.ReadNodeInfoFromFile("nodes.txt")
-		if err != nil {
-			fmt.Printf("Error reading server info: %v\n", err)
-			os.Exit(1)
-		}
-
-		app := tview.NewApplication()
-		list := tview.NewList()
-
-		for _, server := range servers {
-			list.AddItem(server, "", 0, nil)
-		}
-
-		list.SetSelectedFunc(func(index int, mainText, secondaryText string, shortcut rune) {
-			app.Stop()
-			connectToServer(servers[index])
-		})
-
-		if err := app.SetRoot(list, true).Run(); err != nil {
-			panic(err)
-		}
-	}
-
-	selectServer() // Initial server selection
-
-	fmt.Println("Enter commands (get 'help' to see full options):")
-	for {
-		fmt.Print("> ")
-		scanner.Scan()
-		input := scanner.Text()
-
-		if input == "exit" {
-
-			break
-		}
-
-		parts := strings.SplitN(input, " ", 2)
-		command := parts[0]
-
-		// Process commands
-		switch command {
-		case "ping":
-			var req node.PingRequest
-			var res node.PingResponse
-			if err := client.Call("Node.Ping", &req, &res); err != nil {
-				fmt.Printf("Error calling RPC method: %v\n", err)
-				continue
-			}
-			fmt.Println(res.Message)
-		case "list":
-			var req node.ListParticipantsRequest
-			var res node.ListParticipantsResponse
-			if err := client.Call("Node.ListParticipants", &req, &res); err != nil {
-				fmt.Printf("Error calling RPC method: %v\n", err)
-				continue
-			}
-			if len(res.Participants) == 0 {
-				fmt.Println("No participants found.")
-			} else {
-				fmt.Println("List of Participants:")
-				for _, participant := range res.Participants {
-					fmt.Println(" -", participant)
-				}
-			}
-		case "transfer":
-			if len(parts) < 3 {
-				fmt.Println("Usage: transfer <TargetAddr> <Amount>")
-				continue
-			}
-			targetAddr := parts[1]
-			amount, err := strconv.Atoi(parts[2])
-			if err != nil {
-				fmt.Printf("Invalid amount: %v\n", err)
-				continue
-			}
-			var req node.ParticipantInitiateTransferRequest = node.ParticipantInitiateTransferRequest{
-				TargetAddr: targetAddr,
-				Amount:     amount,
-			}
-			var res node.ParticipantInitiateTransferResponse
-			if err := client.Call("Node.StartTransfer", &req, &res); err != nil {
-				fmt.Printf("Error calling RPC method: %v\n", err)
-				continue
-			}
-			fmt.Println("Transfer request initiated.")
-		case "switch":
-			if client != nil {
-				client.Close()
-			}
-			selectServer() // Connect to a new server
 		default:
 			fmt.Println("Unknown command:", input)
 		}
