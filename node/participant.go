@@ -26,3 +26,14 @@ func (n *Node) ParticipantConnectToCoordinator(req *ParticipantConnectToCoordina
 	n.Print(fmt.Sprintf("Connected to coordinator: %v", req.Addr))
 	return nil
 }
+
+type StartTransferRequest struct {
+	TargetAddr string
+	Amount     int
+}
+type StartTransferResponse struct{}
+
+func (n *Node) StartTransfer(req *StartTransferRequest, res *StartTransferResponse) error {
+	fmt.Printf("Transfer req: %v", req.Amount)
+	return nil
+}

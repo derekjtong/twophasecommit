@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/rpc"
 	"os"
+	"strconv"
 	"strings"
 	"twophasecommit/node"
 	"twophasecommit/utils"
@@ -128,6 +129,7 @@ func startServer() {
 		"Participant B: " + addrParticipantB,
 	}
 
+	// Store node data to file for client to read from
 	err = utils.WriteNodeInfoToFile(nodesInfo, "nodes.txt")
 	if err != nil {
 		fmt.Printf("Error writing node info to file: %v\n", err)
@@ -144,39 +146,31 @@ func startClient() {
 		fmt.Printf("Error reading server info: %v\n", err)
 		os.Exit(1)
 	}
-
 	fmt.Println("Available servers:")
 	for i, server := range servers {
 		fmt.Printf("%d: %s\n", i+1, server)
 	}
-
 	fmt.Print("Choose a server to connect to: ")
 	var choice int
 	fmt.Scanln(&choice)
-
 	if choice < 1 || choice > len(servers) {
 		fmt.Println("Invalid choice")
 		os.Exit(1)
 	}
 
-	// User selects the server by number
+	// Select server by number
 	selectedServer := servers[choice-1]
-
-	// Split the selectedServer string by ":"
 	parts := strings.Split(selectedServer, ":")
-
-	// Check if we have the expected number of parts (at least 3 parts: index, name, IP and port)
 	if len(parts) < 3 {
 		fmt.Println("Invalid server format")
 		os.Exit(1)
 	}
 
-	// The IP address is the second to the last part, and the port is the last part
+	// Second to last is IP address, last is port
 	IPAddress := strings.TrimSpace(parts[len(parts)-2])
 	Port := strings.TrimSpace(parts[len(parts)-1])
 
 	fmt.Printf("Connecting to %s:%s...\n", IPAddress, Port)
-
 	client, err := rpc.Dial("tcp", fmt.Sprintf("%s:%s", IPAddress, Port))
 	if err != nil {
 		fmt.Printf("Error dialing RPC server: %v\n", err)
@@ -191,7 +185,6 @@ func startClient() {
 		fmt.Printf("Error calling RPC method: %v\n", err)
 		os.Exit(1)
 	}
-
 	fmt.Printf("Connected to %v!\n", response.Name)
 
 	runCLI(client)
@@ -213,10 +206,6 @@ func runCLI(client *rpc.Client) {
 
 		parts := strings.SplitN(input, " ", 2)
 		command := parts[0]
-		// var argument string
-		// if len(parts) > 1 {
-		// 	argument = parts[1]
-		// }
 
 		// Process commands
 		switch command {
@@ -243,6 +232,28 @@ func runCLI(client *rpc.Client) {
 					fmt.Println(" -", participant)
 				}
 			}
+		case "transfer":
+			if len(parts) < 3 {
+				fmt.Println("Usage: transfer <TargetAddr> <Amount>")
+				continue
+			}
+			targetAddr := parts[1]
+			amount, err := strconv.Atoi(parts[2])
+			if err != nil {
+				fmt.Printf("Invalid amount: %v\n", err)
+				continue
+			}
+
+			var req node.StartTransferRequest = node.StartTransferRequest{
+				TargetAddr: targetAddr,
+				Amount:     amount,
+			}
+			var res node.StartTransferResponse
+			if err := client.Call("Node.StartTransfer", &req, &res); err != nil {
+				fmt.Printf("Error calling RPC method: %v\n", err)
+				continue
+			}
+			fmt.Println("Transfer request initiated.")
 		default:
 			fmt.Println("Unknown command:", input)
 		}
