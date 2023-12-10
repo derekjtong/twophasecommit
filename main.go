@@ -233,11 +233,11 @@ func startClient() {
 				fmt.Printf("Invalid amount: %v\n", err)
 				continue
 			}
-			var req node.StartTransferRequest = node.StartTransferRequest{
+			var req node.ParticipantInitiateTransferRequest = node.ParticipantInitiateTransferRequest{
 				TargetAddr: targetAddr,
 				Amount:     amount,
 			}
-			var res node.StartTransferResponse
+			var res node.ParticipantInitiateTransferResponse
 			if err := client.Call("Node.StartTransfer", &req, &res); err != nil {
 				fmt.Printf("Error calling RPC method: %v\n", err)
 				continue
@@ -352,11 +352,11 @@ func coolClient() {
 				fmt.Printf("Invalid amount: %v\n", err)
 				continue
 			}
-			var req node.StartTransferRequest = node.StartTransferRequest{
+			var req node.ParticipantInitiateTransferRequest = node.ParticipantInitiateTransferRequest{
 				TargetAddr: targetAddr,
 				Amount:     amount,
 			}
-			var res node.StartTransferResponse
+			var res node.ParticipantInitiateTransferResponse
 			if err := client.Call("Node.StartTransfer", &req, &res); err != nil {
 				fmt.Printf("Error calling RPC method: %v\n", err)
 				continue
