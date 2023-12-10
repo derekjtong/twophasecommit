@@ -37,18 +37,24 @@ type ListParticipantsResponse struct {
 
 func (n *Node) ListParticipants(req *ListParticipantsRequest, res *ListParticipantsResponse) error {
 	if n.Type != "Coordinator" {
-		return fmt.Errorf("this node is not a coordinator")
+		n.Print("Requesting participant list from coordinator")
+		if n.p_coordinatorClient == nil {
+			return fmt.Errorf("coordinator client not set")
+		}
+		err := n.p_coordinatorClient.Call("Node.ListParticipants", req, res)
+		if err != nil {
+			return fmt.Errorf("failed to get participant list from coordinator: %v", err)
+		}
+	} else {
+		n.Print("Listing participants as coordinator")
+
+		// Initialize response slice
+		res.Participants = make([]string, 0, len(n.c_participantClients))
+
+		// Iterate over the map and collect participant names
+		for name := range n.c_participantClients {
+			res.Participants = append(res.Participants, name)
+		}
 	}
-
-	n.Print("Listing participants")
-
-	// Initialize response slice
-	res.Participants = make([]string, 0, len(n.c_participantClients))
-
-	// Iterate over the map and collect participant names
-	for name := range n.c_participantClients {
-		res.Participants = append(res.Participants, name)
-	}
-
 	return nil
 }
