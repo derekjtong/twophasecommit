@@ -30,33 +30,6 @@ func (n *Node) ParticipantConnectToCoordinator(req *ParticipantConnectToCoordina
 	return nil
 }
 
-type ClientParticipantSendRequest struct {
-	TargetAddr string
-	TargetName string
-	Amount     float64
-}
-type ClientParticipantSendResponse struct{}
-
-func (n *Node) ClientParticipantSend(req *ParticipantCoordinatorSendRequest, res *ParticipantCoordinatorSendResponse) error {
-	if n.Type != "Participant" {
-		return fmt.Errorf("must be participant to send")
-	}
-	coordReq := ParticipantCoordinatorSendRequest{
-		TargetAddr: req.TargetAddr,
-		TargetName: req.TargetName,
-		Amount:     req.Amount,
-		SenderAddr: n.Addr,
-		SenderName: n.Name,
-	}
-	var coordRes ParticipantCoordinatorSendResponse
-	err := n.p_coordinatorClient.Call("Node.ParticipantCoordinatorSend", &coordReq, &coordRes)
-	if err != nil {
-		return fmt.Errorf("error initiating send with coordinator: %v", err)
-	}
-	fmt.Printf("Send to %v initiated for amount %v\n", req.TargetAddr, req.Amount)
-	return nil
-}
-
 type GetBalanceRequest struct {
 	AccountAddr string
 }
@@ -191,37 +164,4 @@ func (n *Node) WriteBalance(balance float64) error {
 	}
 
 	return nil
-}
-
-type PrepareRequest struct {
-	TargetAddr string
-	Amount     float64
-}
-
-type PrepareResponse struct {
-	Ready bool
-}
-
-func (n *Node) Prepare(req *PrepareRequest, res *PrepareResponse) error {
-	if n.promisedCommit {
-		res.Ready = false
-	}
-	n.promisedCommit = true
-	if n.canCommit(req) {
-		res.Ready = true
-	} else {
-		n.promisedCommit = false
-		res.Ready = false
-	}
-	return nil
-}
-
-// Check of participant can commit
-func (n *Node) canCommit(req *PrepareRequest) bool {
-	amt, err := n.getBalance()
-	if err != nil {
-		n.Print(fmt.Sprintf("Error getting balance: %v", err))
-		return false
-	}
-	return amt >= req.Amount
 }
