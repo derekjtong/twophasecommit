@@ -219,16 +219,55 @@ func startClient() {
 				}
 			}
 		case "transfer":
-			if len(parts) < 3 {
-				fmt.Println("Usage: transfer <TargetAddr> <Amount>")
+			var typeReq node.GetInfoRequest
+			var typeRes node.GetInfoResponse
+			if err := client.Call("Node.GetInfo", &typeReq, &typeRes); err != nil {
+				fmt.Printf("Error calling RPC method: %v\n", err)
 				continue
 			}
-			targetAddr := parts[1]
-			amount, err := strconv.Atoi(parts[2])
-			if err != nil {
-				fmt.Printf("Invalid amount: %v\n", err)
+			if typeRes.Type != "Participant" {
+				fmt.Printf("Transfer error: must be participant to initiate transfer\n")
 				continue
 			}
+			var listReq node.ListParticipantsRequest
+			var listRes node.ListParticipantsResponse
+			if err := client.Call("Node.ListParticipants", &listReq, &listRes); err != nil {
+				fmt.Printf("Error calling RPC method: %v\n", err)
+				continue
+			}
+			if len(listRes.Participants) == 0 {
+				fmt.Println("No participants available for transfer.")
+				continue
+			}
+			fmt.Println("Select a participant to transfer to:")
+			for i, participant := range listRes.Participants {
+				selfLabel := ""
+				if participant == typeRes.Name {
+					selfLabel = " (self)"
+				}
+				fmt.Printf("%d: %s%s\n", i+1, participant, selfLabel)
+			}
+			var participantChoice int
+			fmt.Print("Enter participant number: ")
+			fmt.Scanln(&participantChoice)
+			if participantChoice < 1 || participantChoice > len(listRes.Participants) {
+				fmt.Println("Invalid participant choice")
+				continue
+			}
+			targetAddr := listRes.Participants[participantChoice-1]
+			// Check if the selected participant is the client itself
+			if targetAddr == typeRes.Name {
+				fmt.Println("Cannot transfer to self. Please select a different participant.")
+				continue
+			}
+			var amount float64
+			fmt.Print("Enter the amount to transfer: ")
+			fmt.Scanln(&amount)
+			if amount <= 0 {
+				fmt.Println("Invalid amount")
+				continue
+			}
+
 			var req node.ParticipantInitiateTransferRequest = node.ParticipantInitiateTransferRequest{
 				TargetAddr: targetAddr,
 				Amount:     amount,
@@ -238,12 +277,39 @@ func startClient() {
 				fmt.Printf("Error calling RPC method: %v\n", err)
 				continue
 			}
-			fmt.Println("Transfer request initiated.")
+			fmt.Println("Transfer request initiated")
 		case "switch":
 			if client != nil {
 				client.Close()
 			}
 			connectToServer() // Connect to a new server
+		case "bal":
+			var req node.CheckFundsRequest
+			var res node.CheckFundsResponse
+			if err := client.Call("Node.CheckFunds", &req, &res); err != nil {
+				fmt.Printf("Error calling RPC method: %v\n", err)
+				continue
+			}
+			fmt.Printf("Balance: %.2f\n", res.Balance)
+		case "deposit":
+			if len(parts) != 2 {
+				fmt.Printf("Usage: deposit <amout>")
+				continue
+			}
+			amt, err := strconv.ParseFloat(parts[1], 64)
+			if err != nil {
+				fmt.Printf("Error parsing amount: %v", err)
+				continue
+			}
+			var req node.DepositRequest = node.DepositRequest{
+				Amount: amt,
+			}
+			var res node.DepositResponse
+			if err := client.Call("Node.Deposit", &req, &res); err != nil {
+				fmt.Printf("Error calling RPC method: %v\n", err)
+				continue
+			}
+			fmt.Printf("Deposited %.2f\n", amt)
 		default:
 			fmt.Println("Unknown command:", input)
 		}
