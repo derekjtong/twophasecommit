@@ -11,6 +11,7 @@ type ClientParticipantSendRequest struct {
 type ClientParticipantSendResponse struct{}
 
 func (n *Node) ClientParticipantSend(req *ParticipantCoordinatorSendRequest, res *ParticipantCoordinatorSendResponse) error {
+	n.Print("----Transaction Request----")
 	if n.Type != "Participant" {
 		return fmt.Errorf("must be participant to send")
 	}
@@ -26,45 +27,71 @@ func (n *Node) ClientParticipantSend(req *ParticipantCoordinatorSendRequest, res
 	if err != nil {
 		return fmt.Errorf("error initiating send with coordinator: %v", err)
 	}
-	fmt.Printf("Send to %v initiated for amount %v\n", req.TargetAddr, req.Amount)
+	n.Print(fmt.Sprintf("Sent %v to %v\n", req.Amount, req.TargetAddr))
 	return nil
 }
 
 // RPC: Prepare requset
-type PrepareRequest struct {
+type ReceivePrepareRequest struct {
 	TargetAddr string
 	Amount     float64
 }
-type PrepareResponse struct {
+type ReceivePrepareResponse struct {
 	Ready bool
 }
 
-func (n *Node) Prepare(req *PrepareRequest, res *PrepareResponse) error {
-	n.Print("receive prepare req\n")
+func (n *Node) ReceivePrepare(req *ReceivePrepareRequest, res *ReceivePrepareResponse) error {
+	n.Print("Receive prepare")
 	if n.promisedCommit {
-		n.Print("not ready 1\n")
+		n.Print("Rejected, already promised")
 		res.Ready = false
 		return nil
 	}
 	n.promisedCommit = true
-	if n.canCommit(req) {
-		n.Print("ready\n")
+	bal, err := n.getBalance()
+	if err != nil {
+		n.Print(fmt.Sprintf("Error getting balance: %v", err))
+	}
+
+	if bal+req.Amount >= 0 {
+		n.Print("Accepted")
+		n.transactionAmount = req.Amount
 		res.Ready = true
 		return nil
 	} else {
-		n.Print("not ready 2\n")
+		n.Print("Rejected, balance too low")
 		n.promisedCommit = false
 		res.Ready = false
 	}
 	return nil
 }
 
-// Check if participant can commit
-func (n *Node) canCommit(req *PrepareRequest) bool {
+type ReceiveCommitRequest struct{}
+
+type ReceiveCommitResponse struct{}
+
+func (n *Node) ReceiveCommit(req *ReceiveCommitRequest, res *ReceiveCommitResponse) error {
+	n.Print("Receive commit")
 	bal, err := n.getBalance()
 	if err != nil {
-		n.Print(fmt.Sprintf("Error getting balance: %v", err))
-		return false
+		fmt.Printf("Error getting balance: %v\n", err)
 	}
-	return bal+req.Amount >= 0
+
+	err = n.WriteBalance(bal + n.transactionAmount)
+	if err != nil {
+		fmt.Printf("Error writing balance: %v\n", err)
+	}
+	n.promisedCommit = false
+	return nil
+}
+
+type ReceiveRollbackRequest struct{}
+
+type ReceiveRollbackResponse struct{}
+
+func (n *Node) ReceiveRollback(req *ReceiveRollbackRequest, res *ReceiveRollbackResponse) error {
+	n.Print("Receive rollback")
+
+	n.promisedCommit = false
+	return nil
 }
