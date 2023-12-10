@@ -142,7 +142,9 @@ func startServer() {
 
 func startClient() {
 	var client *rpc.Client
-	var currentIP string
+	var currentAddr string
+	var currentName string
+	var currentType string
 	scanner := bufio.NewScanner(os.Stdin)
 
 	connectToServer := func() {
@@ -170,13 +172,34 @@ func startClient() {
 		}
 		IPAddress := strings.TrimSpace(parts[len(parts)-2])
 		Port := strings.TrimSpace(parts[len(parts)-1])
-		fmt.Printf("Connecting to %s:%s...\n", IPAddress, Port)
 		client, err = rpc.Dial("tcp", fmt.Sprintf("%s:%s", IPAddress, Port))
-		currentIP = fmt.Sprintf("%s:%s", IPAddress, Port)
 		if err != nil {
 			fmt.Printf("Error dialing RPC server: %v\n", err)
 			os.Exit(1)
 		}
+		var req node.GetInfoRequest
+		var res node.GetInfoResponse
+		if err := client.Call("Node.GetInfo", &req, &res); err != nil {
+			fmt.Printf("Error callign RPC method: %v\n", err)
+			os.Exit(1)
+		}
+		currentAddr = res.Addr
+		currentName = res.Name
+		currentType = res.Type
+		if currentType == "Participant" {
+			fmt.Printf("Connected to %s-%s\n", currentType, currentName)
+		} else {
+			fmt.Printf("Connected to %s\n", currentType)
+		}
+	}
+
+	getBalance := func() float64 {
+		var req node.GetBalanceRequest
+		var res node.GetBalanceResponse
+		if err := client.Call("Node.GetBalance", &req, &res); err != nil {
+			fmt.Printf("Error calling RPC method: %v\n", err)
+		}
+		return res.Balance
 	}
 
 	connectToServer() // Initial connection setup
@@ -217,13 +240,18 @@ func startClient() {
 				for i, name := range res.Names {
 					address := res.Addresses[i] // Get the corresponding address
 					selfLabel := ""
-					if address == currentIP {
+					if address == currentAddr {
 						selfLabel = " (self)"
 					}
 					fmt.Printf("%d: %s - %s%s\n", i+1, name, address, selfLabel)
 				}
 			}
 		case "send":
+			var bal float64 = getBalance()
+			if bal <= 0 {
+				fmt.Printf("Insufficient balance: %.2f\n", bal)
+				continue
+			}
 			var listReq node.ListParticipantsRequest
 			var listRes node.ListParticipantsResponse
 			if err := client.Call("Node.ListParticipants", &listReq, &listRes); err != nil {
@@ -238,7 +266,7 @@ func startClient() {
 			for i, name := range listRes.Names {
 				address := listRes.Addresses[i] // Get the corresponding address
 				selfLabel := ""
-				if address == currentIP {
+				if address == currentAddr {
 					selfLabel = " (self)"
 				}
 				fmt.Printf("%d: %s - %s%s\n", i+1, name, address, selfLabel)
@@ -253,10 +281,11 @@ func startClient() {
 			targetAddr := listRes.Addresses[participantChoice-1]
 			targetName := listRes.Names[participantChoice-1]
 			// Check if the selected participant is the client itself
-			if targetAddr == currentIP {
+			if targetAddr == currentAddr {
 				fmt.Println("Cannot send to self. Please select a different participant.")
 				continue
 			}
+			fmt.Printf("Balance: %.2f\n", bal)
 			var amount float64
 			fmt.Print("Enter the amount to send: ")
 			fmt.Scanln(&amount)
@@ -274,7 +303,7 @@ func startClient() {
 				fmt.Printf("Error calling RPC method: %v\n", err)
 				continue
 			}
-			fmt.Printf("Sent %.2f to %s\n", amount, targetName)
+			fmt.Printf("Sent %.2f from %s to %s\n", amount, currentName, targetName)
 		case "switch":
 			// Connect to a new server
 			if client != nil {
@@ -282,14 +311,7 @@ func startClient() {
 			}
 			connectToServer()
 		case "bal":
-			// Check balance
-			var req node.GetBalanceRequest
-			var res node.GetBalanceResponse
-			if err := client.Call("Node.GetBalance", &req, &res); err != nil {
-				fmt.Printf("Error calling RPC method: %v\n", err)
-				continue
-			}
-			fmt.Printf("Balance: %.2f\n", res.Balance)
+			fmt.Printf("Balance: %.2f\n", getBalance())
 		case "deposit":
 			// Deposit money
 			if len(parts) != 2 {
