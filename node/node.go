@@ -23,6 +23,7 @@ type Node struct {
 	// Participant Related
 	p_coordinatorClient *rpc.Client
 	promisedCommit      bool
+	transactionAmount   float64
 }
 
 func NewParticipant(addr string, name string) (*Node, error) {
