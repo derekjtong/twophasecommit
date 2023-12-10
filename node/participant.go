@@ -90,40 +90,33 @@ type DepositRequest struct {
 }
 
 type DepositResponse struct {
-	Success bool
-	Message string
 }
 
 // TODO: Replace with mini-cloud
 func (n *Node) Deposit(req *DepositRequest, res *DepositResponse) error {
 	// Check if the deposit amount is valid (non-negative)
 	if req.Amount < 0 {
-		res.Success = false
-		res.Message = "Invalid deposit amount (negative)"
-		return nil
+		return fmt.Errorf("cannot deposit negative")
 	}
 
 	// TODO: Read/write lock
 	// Read the current balance from the data file
 	currentBalance, err := n.getBalance()
 	if err != nil {
-		res.Success = false
-		res.Message = fmt.Sprintf("Error reading current balance: %v", err)
+		n.Print(fmt.Sprintf("Error reading current balance: %v", err))
 		return err
 	}
 	// Calculate the new balance after deposit
 	newBalance := currentBalance + req.Amount
 
 	// Write the new balance to the data file
-	writeErr := n.WriteBalance(newBalance)
-	if writeErr != nil {
-		res.Success = false
-		res.Message = fmt.Sprintf("Error updating balance: %v", writeErr)
-		return writeErr
+	err = n.WriteBalance(newBalance)
+	if err != nil {
+		n.Print(fmt.Sprintf("Error updating balance: %v", err))
+		return err
 	}
 
-	res.Success = true
-	res.Message = fmt.Sprintf("Deposit of %.2f successful. New balance: %.2f", req.Amount, newBalance)
+	n.Print(fmt.Sprintf("Deposit %.2f successful. New balance: %.2f", req.Amount, newBalance))
 	return nil
 }
 
