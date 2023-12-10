@@ -95,8 +95,8 @@ func startServer() {
 		return
 	}
 	// Send coordinator to participants (prepare variables)
-	var req = node.SetCoordinatorRequest{Addr: addrCoordinator}
-	var res node.SetCoordinatorResponse
+	var req = node.ParticipantConnectToCoordinatorRequest{Addr: addrCoordinator}
+	var res node.ParticipantConnectToCoordinatorResponse
 
 	// Send coordinator to Participant A
 	client, err := rpc.Dial("tcp", addrParticipantA)
@@ -104,7 +104,7 @@ func startServer() {
 		fmt.Printf("Error sending C address to P-A: %v\n", err)
 		return
 	}
-	if err := client.Call("Node.SetCoordinator", &req, &res); err != nil {
+	if err := client.Call("Node.ParticipantConnectToCoordinator", &req, &res); err != nil {
 		fmt.Printf("Error sending C address to P-A: %v\n", err)
 		return
 	}
@@ -116,31 +116,75 @@ func startServer() {
 		fmt.Printf("Error sending C address to P-A: %v\n", err)
 		return
 	}
-	if err := client.Call("Node.SetCoordinator", &req, &res); err != nil {
+	if err := client.Call("Node.ParticipantConnectToCoordinator", &req, &res); err != nil {
 		fmt.Printf("Error sending C address to P-A: %v\n", err)
 		return
 	}
 	client.Close()
+
+	nodesInfo := []string{
+		"Coordinator: " + addrCoordinator,
+		"Participant A: " + addrParticipantA,
+		"Participant B: " + addrParticipantB,
+	}
+
+	err = utils.WriteNodeInfoToFile(nodesInfo, "nodes.txt")
+	if err != nil {
+		fmt.Printf("Error writing node info to file: %v\n", err)
+		return
+	}
 
 	select {}
 
 }
 
 func startClient() {
-	fmt.Print("Starting Client!\nNode IP address: (defaulting to 127.0.0.1)\n")
-	var IPAddress string = "127.0.0.1"
-	// fmt.Scanln(&IPAddress)
-	fmt.Print("Node port number: ")
-	var Port int
-	fmt.Scanln(&Port)
-	fmt.Printf("Connecting to %s:%d...\n", IPAddress, Port)
-	client, err := rpc.Dial("tcp", fmt.Sprintf("%s:%d", IPAddress, Port))
+	servers, err := utils.ReadNodeInfoFromFile("nodes.txt")
+	if err != nil {
+		fmt.Printf("Error reading server info: %v\n", err)
+		os.Exit(1)
+	}
+
+	fmt.Println("Available servers:")
+	for i, server := range servers {
+		fmt.Printf("%d: %s\n", i+1, server)
+	}
+
+	fmt.Print("Choose a server to connect to: ")
+	var choice int
+	fmt.Scanln(&choice)
+
+	if choice < 1 || choice > len(servers) {
+		fmt.Println("Invalid choice")
+		os.Exit(1)
+	}
+
+	// User selects the server by number
+	selectedServer := servers[choice-1]
+
+	// Split the selectedServer string by ":"
+	parts := strings.Split(selectedServer, ":")
+
+	// Check if we have the expected number of parts (at least 3 parts: index, name, IP and port)
+	if len(parts) < 3 {
+		fmt.Println("Invalid server format")
+		os.Exit(1)
+	}
+
+	// The IP address is the second to the last part, and the port is the last part
+	IPAddress := strings.TrimSpace(parts[len(parts)-2])
+	Port := strings.TrimSpace(parts[len(parts)-1])
+
+	fmt.Printf("Connecting to %s:%s...\n", IPAddress, Port)
+
+	client, err := rpc.Dial("tcp", fmt.Sprintf("%s:%s", IPAddress, Port))
 	if err != nil {
 		fmt.Printf("Error dialing RPC server: %v\n", err)
 		os.Exit(1)
 	}
 	defer client.Close()
 
+	// Test the connection with a ping
 	var request node.PingRequest
 	var response node.PingResponse
 	if err := client.Call("Node.Ping", &request, &response); err != nil {
@@ -148,7 +192,7 @@ func startClient() {
 		os.Exit(1)
 	}
 
-	fmt.Printf("Connected to node %v!\n", response.Name)
+	fmt.Printf("Connected to %v!\n", response.Name)
 
 	runCLI(client)
 }
@@ -184,6 +228,21 @@ func runCLI(client *rpc.Client) {
 				continue
 			}
 			fmt.Println(res.Message)
+		case "list":
+			var req node.ListParticipantsRequest
+			var res node.ListParticipantsResponse
+			if err := client.Call("Node.ListParticipants", &req, &res); err != nil {
+				fmt.Printf("Error calling RPC method: %v\n", err)
+				continue
+			}
+			if len(res.Participants) == 0 {
+				fmt.Println("No participants found.")
+			} else {
+				fmt.Println("List of Participants:")
+				for _, participant := range res.Participants {
+					fmt.Println(" -", participant)
+				}
+			}
 		default:
 			fmt.Println("Unknown command:", input)
 		}

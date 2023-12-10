@@ -87,7 +87,10 @@ type PingResponse struct {
 func (n *Node) Ping(req *PingRequest, res *PingResponse) error {
 	n.Print("Pinged")
 	res.Message = "Pong from coordinator"
-	res.Name = "coordinator"
+	res.Name = n.Type + "-" + n.Name
+	if n.Type == "Coordinator" {
+		res.Name = n.Type
+	}
 	return nil
 }
 

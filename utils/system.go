@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"bufio"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -21,4 +22,37 @@ func ClearNodeDataDir() error {
 	}
 
 	return nil
+}
+
+func WriteNodeInfoToFile(nodesInfo []string, filename string) error {
+	file, err := os.Create(filename)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+
+	for _, info := range nodesInfo {
+		_, err := file.WriteString(info + "\n")
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func ReadNodeInfoFromFile(filename string) ([]string, error) {
+	file, err := os.Open(filename)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+
+	var lines []string
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		lines = append(lines, scanner.Text())
+	}
+
+	return lines, scanner.Err()
 }
