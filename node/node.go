@@ -6,18 +6,23 @@ import (
 	"net/rpc"
 	"os"
 	"path/filepath"
-	"sync"
 )
+
+type ConnectionData struct {
+	Name    string
+	Address string
+	Client  *rpc.Client
+}
 
 type Node struct {
 	Name string
 	Addr string
 	Type string
 	// Coordinator Related
-	c_participantClients map[string]*rpc.Client
+	c_participantClients map[string]*ConnectionData
 	// Participant Related
 	p_coordinatorClient *rpc.Client
-	fileLock            sync.Mutex
+	promisedCommit      bool
 }
 
 func NewParticipant(addr string, name string) (*Node, error) {
@@ -46,15 +51,15 @@ func (n *Node) Start() {
 	// Check and create node_data directory
 	nodeDataDir := "node_data"
 	if _, err := os.Stat(nodeDataDir); os.IsNotExist(err) {
-		err := os.Mkdir(nodeDataDir, 0755) // Create directory with read/write/execute for user, and read/execute for group and others
+		err := os.Mkdir(nodeDataDir, 0755)
 		if err != nil {
 			n.Print(fmt.Sprintf("Error creating data directory: %v", err))
 			return
 		}
 	}
 
-	// Create a data file for the node
-	filename := fmt.Sprintf("%s-%s.data", n.Type, n.Name) // Change extension based on your data format
+	// Create a data file for node
+	filename := fmt.Sprintf("%s-%s.data", n.Type, n.Name)
 	filepath := filepath.Join(nodeDataDir, filename)
 	file, err := os.Create(filepath)
 	if err != nil {
@@ -76,7 +81,6 @@ func (n *Node) Start() {
 		return
 	}
 	defer listener.Close()
-
 	rpcServer := rpc.NewServer()
 	err = rpcServer.Register(n)
 	if err != nil {
@@ -94,7 +98,7 @@ type PingResponse struct {
 
 func (n *Node) Ping(req *PingRequest, res *PingResponse) error {
 	n.Print("Pinged")
-	res.Message = "Pong from coordinator"
+	res.Message = fmt.Sprintf("Pong from %s-%s", n.Type, n.Name)
 	res.Name = n.Type + "-" + n.Name
 	if n.Type == "Coordinator" {
 		res.Name = n.Type

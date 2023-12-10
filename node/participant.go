@@ -18,6 +18,7 @@ func (n *Node) ParticipantConnectToCoordinator(req *ParticipantConnectToCoordina
 	if err != nil {
 		n.Print(fmt.Sprintf("Error connecting to coordinator: %v", err))
 	}
+	n.Print("Connected to coordinator")
 	var addReq = AddParticipantRequest{Name: n.Name, Addr: n.Addr}
 	var addRes AddParticipantResponse
 	if err := coordinatorClient.Call("Node.AddParticipant", &addReq, &addRes); err != nil {
@@ -26,57 +27,54 @@ func (n *Node) ParticipantConnectToCoordinator(req *ParticipantConnectToCoordina
 	}
 	n.p_coordinatorClient = coordinatorClient
 
-	n.Print(fmt.Sprintf("Connected to coordinator: %v", req.Addr))
 	return nil
 }
 
-type ParticipantInitiateTransferRequest struct {
+type ClientParticipantSendRequest struct {
 	TargetAddr string
+	TargetName string
 	Amount     float64
 }
-type ParticipantInitiateTransferResponse struct{}
+type ClientParticipantSendResponse struct{}
 
-func (n *Node) StartTransfer(req *ParticipantInitiateTransferRequest, res *ParticipantInitiateTransferResponse) error {
+func (n *Node) ClientParticipantSend(req *ParticipantCoordinatorSendRequest, res *ParticipantCoordinatorSendResponse) error {
 	if n.Type != "Participant" {
-		return fmt.Errorf("must be participant to transfer")
+		return fmt.Errorf("must be participant to send")
 	}
-	coordReq := InitiateTransferRequest{
+	coordReq := ParticipantCoordinatorSendRequest{
 		TargetAddr: req.TargetAddr,
+		TargetName: req.TargetName,
 		Amount:     req.Amount,
+		SenderAddr: n.Addr,
+		SenderName: n.Name,
 	}
-	var coordRes InitiateTransferResponse
-	err := n.p_coordinatorClient.Call("Node.InitiateTransfer", &coordReq, &coordRes)
+	var coordRes ParticipantCoordinatorSendResponse
+	err := n.p_coordinatorClient.Call("Node.ParticipantCoordinatorSend", &coordReq, &coordRes)
 	if err != nil {
-		return fmt.Errorf("error initiating transfer with coordinator: %v", err)
+		return fmt.Errorf("error initiating send with coordinator: %v", err)
 	}
-	fmt.Printf("Transfer to %v initiated for amount %v\n", req.TargetAddr, req.Amount)
+	fmt.Printf("Send to %v initiated for amount %v\n", req.TargetAddr, req.Amount)
 	return nil
 }
 
-type CheckFundsRequest struct {
+type GetBalanceRequest struct {
 	AccountAddr string
 }
 
-type CheckFundsResponse struct {
+type GetBalanceResponse struct {
 	Balance float64
-	Success bool
 }
 
-func (n *Node) CheckFunds(req *CheckFundsRequest, res *CheckFundsResponse) error {
-	// Retrieve the balance for the specified account
+func (n *Node) GetBalance(req *GetBalanceRequest, res *GetBalanceResponse) error {
 	balance, err := n.getBalance()
 	if err != nil {
-		// In case of an error (e.g., account not found)
-		res.Success = false
 		return fmt.Errorf("error retrieving balance: %v", err)
 	}
-
-	// Set the retrieved balance in the response
 	res.Balance = balance
-	res.Success = true
 	return nil
 }
 
+// TODO: Replace with mini-cloud
 func (n *Node) getBalance() (float64, error) {
 	// Check if the data file exists
 	nodeDataDir := "node_data"
@@ -123,6 +121,7 @@ type DepositResponse struct {
 	Message string
 }
 
+// TODO: Replace with mini-cloud
 func (n *Node) Deposit(req *DepositRequest, res *DepositResponse) error {
 	// Check if the deposit amount is valid (non-negative)
 	if req.Amount < 0 {
@@ -132,8 +131,6 @@ func (n *Node) Deposit(req *DepositRequest, res *DepositResponse) error {
 	}
 
 	// TODO: Read/write lock
-	n.fileLock.Lock()
-	defer n.fileLock.Unlock()
 	// Read the current balance from the data file
 	currentBalance, err := n.getBalance()
 	if err != nil {
@@ -157,6 +154,7 @@ func (n *Node) Deposit(req *DepositRequest, res *DepositResponse) error {
 	return nil
 }
 
+// TODO: Replace with mini-cloud
 func (n *Node) WriteBalance(balance float64) error {
 	// Check and create node_data directory
 	nodeDataDir := "node_data"
@@ -193,4 +191,37 @@ func (n *Node) WriteBalance(balance float64) error {
 	}
 
 	return nil
+}
+
+type PrepareRequest struct {
+	TargetAddr string
+	Amount     float64
+}
+
+type PrepareResponse struct {
+	Ready bool
+}
+
+func (n *Node) Prepare(req *PrepareRequest, res *PrepareResponse) error {
+	if n.promisedCommit {
+		res.Ready = false
+	}
+	n.promisedCommit = true
+	if n.canCommit(req) {
+		res.Ready = true
+	} else {
+		n.promisedCommit = false
+		res.Ready = false
+	}
+	return nil
+}
+
+// Check of participant can commit
+func (n *Node) canCommit(req *PrepareRequest) bool {
+	amt, err := n.getBalance()
+	if err != nil {
+		n.Print(fmt.Sprintf("Error getting balance: %v", err))
+		return false
+	}
+	return amt >= req.Amount
 }

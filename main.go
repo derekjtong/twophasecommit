@@ -142,6 +142,7 @@ func startServer() {
 
 func startClient() {
 	var client *rpc.Client
+	var currentIP string
 	scanner := bufio.NewScanner(os.Stdin)
 
 	connectToServer := func() {
@@ -171,31 +172,29 @@ func startClient() {
 		Port := strings.TrimSpace(parts[len(parts)-1])
 		fmt.Printf("Connecting to %s:%s...\n", IPAddress, Port)
 		client, err = rpc.Dial("tcp", fmt.Sprintf("%s:%s", IPAddress, Port))
+		currentIP = fmt.Sprintf("%s:%s", IPAddress, Port)
 		if err != nil {
 			fmt.Printf("Error dialing RPC server: %v\n", err)
 			os.Exit(1)
 		}
 	}
 
-	connectToServer() // Initial connection
+	connectToServer() // Initial connection setup
 
 	fmt.Println("Enter commands (get 'help' to see full options):")
 	for {
 		fmt.Print("> ")
 		scanner.Scan()
 		input := scanner.Text()
-
 		if input == "exit" {
-
 			break
 		}
-
 		parts := strings.SplitN(input, " ", 2)
 		command := parts[0]
 
-		// Process commands
 		switch command {
 		case "ping":
+			// Ping current server
 			var req node.PingRequest
 			var res node.PingResponse
 			if err := client.Call("Node.Ping", &req, &res); err != nil {
@@ -204,94 +203,95 @@ func startClient() {
 			}
 			fmt.Println(res.Message)
 		case "list":
+			// List participants
 			var req node.ListParticipantsRequest
 			var res node.ListParticipantsResponse
 			if err := client.Call("Node.ListParticipants", &req, &res); err != nil {
 				fmt.Printf("Error calling RPC method: %v\n", err)
 				continue
 			}
-			if len(res.Participants) == 0 {
+			if len(res.Names) == 0 {
 				fmt.Println("No participants found.")
 			} else {
 				fmt.Println("List of Participants:")
-				for _, participant := range res.Participants {
-					fmt.Println(" -", participant)
+				for i, name := range res.Names {
+					address := res.Addresses[i] // Get the corresponding address
+					selfLabel := ""
+					if address == currentIP {
+						selfLabel = " (self)"
+					}
+					fmt.Printf("%d: %s - %s%s\n", i+1, name, address, selfLabel)
 				}
 			}
-		case "transfer":
-			var typeReq node.GetInfoRequest
-			var typeRes node.GetInfoResponse
-			if err := client.Call("Node.GetInfo", &typeReq, &typeRes); err != nil {
-				fmt.Printf("Error calling RPC method: %v\n", err)
-				continue
-			}
-			if typeRes.Type != "Participant" {
-				fmt.Printf("Transfer error: must be participant to initiate transfer\n")
-				continue
-			}
+		case "send":
 			var listReq node.ListParticipantsRequest
 			var listRes node.ListParticipantsResponse
 			if err := client.Call("Node.ListParticipants", &listReq, &listRes); err != nil {
 				fmt.Printf("Error calling RPC method: %v\n", err)
 				continue
 			}
-			if len(listRes.Participants) == 0 {
-				fmt.Println("No participants available for transfer.")
+			if len(listRes.Names) == 0 {
+				fmt.Println("No participants available to send to.")
 				continue
 			}
-			fmt.Println("Select a participant to transfer to:")
-			for i, participant := range listRes.Participants {
+			fmt.Println("Select a participant to send to:")
+			for i, name := range listRes.Names {
+				address := listRes.Addresses[i] // Get the corresponding address
 				selfLabel := ""
-				if participant == typeRes.Name {
+				if address == currentIP {
 					selfLabel = " (self)"
 				}
-				fmt.Printf("%d: %s%s\n", i+1, participant, selfLabel)
+				fmt.Printf("%d: %s - %s%s\n", i+1, name, address, selfLabel)
 			}
 			var participantChoice int
 			fmt.Print("Enter participant number: ")
 			fmt.Scanln(&participantChoice)
-			if participantChoice < 1 || participantChoice > len(listRes.Participants) {
+			if participantChoice < 1 || participantChoice > len(listRes.Names) {
 				fmt.Println("Invalid participant choice")
 				continue
 			}
-			targetAddr := listRes.Participants[participantChoice-1]
+			targetAddr := listRes.Addresses[participantChoice-1]
+			targetName := listRes.Names[participantChoice-1]
 			// Check if the selected participant is the client itself
-			if targetAddr == typeRes.Name {
-				fmt.Println("Cannot transfer to self. Please select a different participant.")
+			if targetAddr == currentIP {
+				fmt.Println("Cannot send to self. Please select a different participant.")
 				continue
 			}
 			var amount float64
-			fmt.Print("Enter the amount to transfer: ")
+			fmt.Print("Enter the amount to send: ")
 			fmt.Scanln(&amount)
 			if amount <= 0 {
 				fmt.Println("Invalid amount")
 				continue
 			}
-
-			var req node.ParticipantInitiateTransferRequest = node.ParticipantInitiateTransferRequest{
+			var req node.ClientParticipantSendRequest = node.ClientParticipantSendRequest{
 				TargetAddr: targetAddr,
+				TargetName: targetName,
 				Amount:     amount,
 			}
-			var res node.ParticipantInitiateTransferResponse
-			if err := client.Call("Node.StartTransfer", &req, &res); err != nil {
+			var res node.ClientParticipantSendResponse
+			if err := client.Call("Node.ClientParticipantSend", &req, &res); err != nil {
 				fmt.Printf("Error calling RPC method: %v\n", err)
 				continue
 			}
-			fmt.Println("Transfer request initiated")
+			fmt.Println("Send request initiated")
 		case "switch":
+			// Connect to a new server
 			if client != nil {
 				client.Close()
 			}
-			connectToServer() // Connect to a new server
+			connectToServer()
 		case "bal":
-			var req node.CheckFundsRequest
-			var res node.CheckFundsResponse
-			if err := client.Call("Node.CheckFunds", &req, &res); err != nil {
+			// Check balance
+			var req node.GetBalanceRequest
+			var res node.GetBalanceResponse
+			if err := client.Call("Node.GetBalance", &req, &res); err != nil {
 				fmt.Printf("Error calling RPC method: %v\n", err)
 				continue
 			}
 			fmt.Printf("Balance: %.2f\n", res.Balance)
 		case "deposit":
+			// Deposit money
 			if len(parts) != 2 {
 				fmt.Printf("Usage: deposit <amout>")
 				continue
