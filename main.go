@@ -28,6 +28,11 @@ func main() {
 
 func startServer() {
 	// Start Coordinator
+	err := utils.ClearNodeDataDir()
+	if err != nil {
+		fmt.Printf("Error clearing node_data directory: %v\n", err)
+		return
+	}
 	port, err := utils.FindAvailablePort()
 	if err != nil {
 		fmt.Printf("Error finding available port: %v\n", err)
