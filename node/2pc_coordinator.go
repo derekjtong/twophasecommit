@@ -30,15 +30,22 @@ func (n *Node) ParticipantCoordinatorTransaction(req *ParticipantCoordinatorTran
 
 	// Step 1: Prepare Phase
 	n.Print("---Prepare phase---")
+	var combinedError string
 	for _, tx := range req.Transactions {
 		err := n.sendPrepare(tx.Name, tx.Amount, tx.Operation, transactionID)
 		if err != nil {
-			n.LogTransaction("ABORT", transactionID)
-			for _, txRollback := range req.Transactions {
-				n.sendRollback(txRollback.Name, transactionID)
+			if combinedError != "" {
+				combinedError += "; "
 			}
-			return fmt.Errorf("transaction aborted for %s: %v", tx.Name, err)
+			combinedError += fmt.Sprintf("transaction aborted for %s: %v", tx.Name, err)
 		}
+	}
+	if combinedError != "" {
+		n.LogTransaction("ABORT", transactionID)
+		for _, txRollback := range req.Transactions {
+			n.sendRollback(txRollback.Name, transactionID)
+		}
+		return errors.New(combinedError)
 	}
 	n.LogTransaction("COMMIT", transactionID)
 
