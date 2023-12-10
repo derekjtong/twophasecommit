@@ -275,9 +275,8 @@ func startClient() {
 			}
 			targetAddr := listRes.Addresses[participantChoice-1]
 			targetName := listRes.Names[participantChoice-1]
-			// Check if the selected participant is the client itself
 			if targetAddr == currentAddr {
-				fmt.Println("Cannot send to self. Please select a different participant.")
+				fmt.Println("Cannot send to self.")
 				continue
 			}
 			var amount float64
@@ -287,13 +286,24 @@ func startClient() {
 				fmt.Println("Invalid amount")
 				continue
 			}
+
+			// Create transactions for sender and receiver
+			senderTransaction := node.Transaction{
+				Addr:      currentAddr,
+				Name:      currentName,
+				Operation: "subtract",
+				Amount:    amount,
+			}
+			receiverTransaction := node.Transaction{
+				Addr:      targetAddr,
+				Name:      targetName,
+				Operation: "add",
+				Amount:    amount,
+			}
+
+			// Create ClientParticipantTransactionRequest with both transactions
 			var req node.ClientParticipantTransactionRequest = node.ClientParticipantTransactionRequest{
-				TargetAddr:      targetAddr,
-				TargetName:      targetName,
-				TargetOperation: "add",
-				TargetAmount:    amount,
-				SelfOperation:   "subtract",
-				SelfAmount:      amount,
+				Transactions: []node.Transaction{senderTransaction, receiverTransaction},
 			}
 			var res node.ClientParticipantTransactionResponse
 			if err := client.Call("Node.ClientParticipantTransaction", &req, &res); err != nil {
@@ -301,6 +311,7 @@ func startClient() {
 				continue
 			}
 			fmt.Printf("Sent %.2f from %s to %s\n", amount, currentName, targetName)
+
 		case "switch":
 			// Connect to a new server
 			if client != nil {
@@ -337,13 +348,6 @@ func startClient() {
 				fmt.Printf("Error calling RPC method: %v\n", err)
 				continue
 			}
-
-			if len(listRes.Names) < 2 {
-				fmt.Println("At least two participants are required for a transaction.")
-				continue
-			}
-
-			// Function to parse operation input, can be +50 or -50
 			parseOperation := func(input string) (string, float64, error) {
 				var operation string
 				var amount float64
@@ -364,63 +368,86 @@ func startClient() {
 
 				return operation, amount, err
 			}
+			transactions := []node.Transaction{}
 
-			fmt.Printf("Enter operatin and amount for the currently connected participant (e.g., +50, -30, *1.2): ")
-			var senderOpInput string
-			fmt.Scanln(&senderOpInput)
-			var senderOperation, senderAmount, err = parseOperation(senderOpInput)
-			if err != nil {
-				fmt.Printf("Error parsing operation: %v\n", err)
-				continue
-			}
-
-			fmt.Println("Select a participant to send to:")
-			for i, name := range listRes.Names {
-				address := listRes.Addresses[i] // Get the corresponding address
-				selfLabel := ""
-				if address == currentAddr {
-					selfLabel = " (self)"
+			for {
+				allAdded := len(transactions) == len(listRes.Names)
+				if allAdded {
+					fmt.Println("All available participants have been added to the transaction.")
+					break
 				}
-				fmt.Printf("%d: %s - %s%s\n", i+1, name, address, selfLabel)
-			}
-			fmt.Print("Enter participant number: ")
-			var participantChoice int
-			fmt.Scanln(&participantChoice)
-			if participantChoice < 1 || participantChoice > len(listRes.Names) {
-				fmt.Println("Invalid participant choice")
-				continue
-			}
-			targetAddr := listRes.Addresses[participantChoice-1]
-			targetName := listRes.Names[participantChoice-1]
-			if targetAddr == currentAddr {
-				fmt.Println("Cannot send to self. Please select a different target participant.")
-				continue
+				fmt.Println("Select a participant to include in the transaction:")
+				for i, name := range listRes.Names {
+					address := listRes.Addresses[i]
+					addedLabel := ""
+					for _, tx := range transactions {
+						if tx.Addr == address {
+							addedLabel = " (added)"
+							break
+						}
+					}
+					fmt.Printf("%d: %s - %s%s\n", i+1, name, address, addedLabel)
+				}
+
+				fmt.Print("Enter participant number: ")
+				var participantChoice int
+				fmt.Scanln(&participantChoice)
+				if participantChoice < 1 || participantChoice > len(listRes.Names) {
+					fmt.Println("Invalid participant choice")
+					continue
+				}
+
+				targetAddr := listRes.Addresses[participantChoice-1]
+				targetName := listRes.Names[participantChoice-1]
+
+				// Check if the participant has already been added
+				alreadyAdded := false
+				for _, tx := range transactions {
+					if tx.Addr == targetAddr {
+						alreadyAdded = true
+						break
+					}
+				}
+				if alreadyAdded {
+					fmt.Println("This participant has already been added. Please choose a different one.")
+					continue
+				}
+
+				fmt.Printf("Enter operation and amount for participant '%s' (e.g., +50, -30, *1.2): ", targetName)
+				var opInput string
+				fmt.Scanln(&opInput)
+				operation, amount, err := parseOperation(opInput)
+				if err != nil {
+					fmt.Printf("Error parsing operation: %v\n", err)
+					continue
+				}
+
+				transactions = append(transactions, node.Transaction{
+					Addr:      targetAddr,
+					Name:      targetName,
+					Operation: operation,
+					Amount:    amount,
+				})
+
+				fmt.Print("Do you want to add more participants to this transaction? (yes/no): ")
+				var more string
+				fmt.Scanln(&more)
+				if strings.ToLower(more) != "yes" {
+					break
+				}
 			}
 
-			fmt.Printf("Enter operation and amount for target participant (e.g., +50, -30, *1.2): ")
-			var targetOpInput string
-			fmt.Scanln(&targetOpInput)
-			targetOperation, targetAmount, err := parseOperation(targetOpInput)
-			if err != nil {
-				fmt.Printf("Error parsing operation: %v\n", err)
-				continue
-			}
-
+			// Package the transactions into the request
 			var req node.ClientParticipantTransactionRequest = node.ClientParticipantTransactionRequest{
-				TargetAddr:      targetAddr,
-				TargetName:      targetName,
-				TargetOperation: targetOperation,
-				TargetAmount:    targetAmount,
-				SelfOperation:   senderOperation,
-				SelfAmount:      senderAmount,
+				Transactions: transactions,
 			}
 			var res node.ClientParticipantTransactionResponse
 			if err := client.Call("Node.ClientParticipantTransaction", &req, &res); err != nil {
 				fmt.Printf("Error calling RPC method: %v\n", err)
 				continue
 			}
-			fmt.Printf("Connected participant balance %.2f, target participant balance %.2f.\n", senderAmount, targetAmount)
 
+			fmt.Println("Transaction successfully processed.")
 		default:
 			fmt.Println("Unknown command:", input)
 		}

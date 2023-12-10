@@ -7,16 +7,16 @@ import (
 	"github.com/google/uuid"
 )
 
+type Transaction struct {
+	Addr      string
+	Name      string
+	Operation string
+	Amount    float64
+}
+
 // RPC: Participant to Coordinator transaction request
 type ParticipantCoordinatorTransactionRequest struct {
-	TargetAddr      string
-	TargetName      string
-	TargetOperation string
-	TargetAmount    float64
-	SenderAddr      string
-	SenderName      string
-	SenderOperation string
-	SenderAmount    float64
+	Transactions []Transaction
 }
 
 type ParticipantCoordinatorTransactionResponse struct{}
@@ -30,33 +30,23 @@ func (n *Node) ParticipantCoordinatorTransaction(req *ParticipantCoordinatorTran
 
 	// Step 1: Prepare Phase
 	n.Print("---Prepare phase---")
-	errA := n.sendPrepare(req.SenderName, req.SenderAmount, req.SenderOperation, transactionID)
-	errB := n.sendPrepare(req.TargetName, req.TargetAmount, req.TargetOperation, transactionID)
-
-	// Check if both participants are ready and no errors occurred
-	if errA != nil || errB != nil {
-		n.LogTransaction("ABORT", transactionID)
-
-		// Send rollback messages
-		n.sendRollback(req.SenderName, transactionID)
-		n.sendRollback(req.TargetName, transactionID)
-
-		var errMsg string
-		if errA != nil {
-			errMsg += fmt.Sprintf("participant-%s: %v. ", req.SenderName, errA)
+	for _, tx := range req.Transactions {
+		err := n.sendPrepare(tx.Name, tx.Amount, tx.Operation, transactionID)
+		if err != nil {
+			n.LogTransaction("ABORT", transactionID)
+			for _, txRollback := range req.Transactions {
+				n.sendRollback(txRollback.Name, transactionID)
+			}
+			return fmt.Errorf("transaction aborted for %s: %v", tx.Name, err)
 		}
-		if errB != nil {
-			errMsg += fmt.Sprintf("participant-%s: %v. ", req.TargetName, errB)
-		}
-
-		return fmt.Errorf("transaction aborted. %s", errMsg)
 	}
 	n.LogTransaction("COMMIT", transactionID)
 
 	// Step 2: Commit Phase
 	n.Print("---Commit phase---")
-	n.sendCommit(req.SenderName, transactionID)
-	n.sendCommit(req.TargetName, transactionID)
+	for _, tx := range req.Transactions {
+		n.sendCommit(tx.Name, transactionID)
+	}
 
 	return nil
 }

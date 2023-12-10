@@ -9,12 +9,7 @@ import (
 
 // RPC: Client to Participant transaction request. Forwards request to Coordinator.
 type ClientParticipantTransactionRequest struct {
-	TargetAddr      string
-	TargetName      string
-	TargetOperation string
-	TargetAmount    float64
-	SelfOperation   string
-	SelfAmount      float64
+	Transactions []Transaction
 }
 type ClientParticipantTransactionResponse struct{}
 
@@ -24,21 +19,13 @@ func (n *Node) ClientParticipantTransaction(req *ClientParticipantTransactionReq
 		return fmt.Errorf("must be participant to send")
 	}
 	coordReq := ParticipantCoordinatorTransactionRequest{
-		TargetAddr:      req.TargetAddr,
-		TargetName:      req.TargetName,
-		TargetOperation: req.TargetOperation,
-		TargetAmount:    req.TargetAmount,
-		SenderAddr:      n.Addr,
-		SenderName:      n.Name,
-		SenderOperation: req.SelfOperation,
-		SenderAmount:    req.SelfAmount,
+		Transactions: req.Transactions,
 	}
 	var coordRes ParticipantCoordinatorTransactionResponse
 	err := n.p_coordinatorClient.Call("Node.ParticipantCoordinatorTransaction", &coordReq, &coordRes)
 	if err != nil {
 		return fmt.Errorf("coordinator error: %v", err)
 	}
-	n.Print(fmt.Sprintf("Sent %v to %v", req.TargetAmount, req.TargetAddr))
 	n.Print("----Transaction Request End----")
 	return nil
 }
