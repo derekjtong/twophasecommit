@@ -3,6 +3,7 @@ package node
 import (
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -41,6 +42,9 @@ type ReceivePrepareResponse struct {
 }
 
 func (n *Node) ReceivePrepare(req *ReceivePrepareRequest, res *ReceivePrepareResponse) error {
+	if n.sleepBeforeRespondingToCoordinator {
+		time.Sleep(10 * time.Second)
+	}
 	if n.promisedCommit {
 		n.Print(fmt.Sprintf(colorRed + "Response: VoteAbort (already promised)" + colorReset))
 		res.Response = "VoteAbort"
@@ -54,6 +58,9 @@ func (n *Node) ReceivePrepare(req *ReceivePrepareRequest, res *ReceivePrepareRes
 		n.Print(fmt.Sprintf(colorRed + "Response: VoteAbort (error getting balance)" + colorReset))
 		res.Response = "VoteAbort"
 		n.LogTransaction("VoteAbort", req.TransactionID)
+		if n.sleepAfterRespondingToCoordinator {
+			time.Sleep(10 * time.Second)
+		}
 		return err
 	}
 	var newBalance float64
@@ -70,12 +77,18 @@ func (n *Node) ReceivePrepare(req *ReceivePrepareRequest, res *ReceivePrepareRes
 		n.transactionNewBalance = newBalance
 		res.Response = "VoteCommit"
 		n.LogTransaction("VoteCommit", req.TransactionID)
+		if n.sleepAfterRespondingToCoordinator {
+			time.Sleep(10 * time.Second)
+		}
 		return nil
 	}
 	n.promisedCommit = false
 	n.Print(fmt.Sprintf(colorRed + "Response: VoteAbort (insufficient balance)" + colorReset))
 	res.Response = "VoteAbort"
 	n.LogTransaction("VoteAbort", req.TransactionID)
+	if n.sleepAfterRespondingToCoordinator {
+		time.Sleep(10 * time.Second)
+	}
 	return errors.New("insufficient balance")
 }
 
@@ -109,5 +122,19 @@ func (n *Node) ReceiveAbort(req *ReceiveAbortRequest, res *ReceiveAbortResponse)
 	n.LogTransaction("ABORT", req.TransactionID)
 	n.Print(fmt.Sprintf(colorRed + "Aborting" + colorReset))
 	n.promisedCommit = false
+	return nil
+}
+
+// TODO: Client rpc call
+type SimulateDelayRequest struct {
+	sleepBeforeRespondingToCoordinator bool
+	sleepAfterRespondingToCoordinator  bool
+}
+
+type SimulateDelayResponse struct{}
+
+func (n *Node) SimulateDelay(req *SimulateDelayRequest, res *SimulateDelayResponse) error {
+	n.sleepBeforeRespondingToCoordinator = req.sleepBeforeRespondingToCoordinator
+	n.sleepAfterRespondingToCoordinator = req.sleepAfterRespondingToCoordinator
 	return nil
 }
