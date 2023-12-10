@@ -33,7 +33,7 @@ func FindAvailablePort() (int, error) {
 }
 
 func WaitForServerReady(address string) error {
-	// Exponential backoff
+	// Blocked until server ready or timeout
 	var backoff time.Duration = 100
 	const maxBackoff = 5 * time.Second
 	const maxRetries = 10
