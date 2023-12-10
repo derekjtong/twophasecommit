@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"net"
 	"net/rpc"
+	"os"
+	"path/filepath"
 )
 
 type Node struct {
@@ -39,6 +41,27 @@ func (n *Node) Print(msg string) {
 func (n *Node) Start() {
 	n.Print(fmt.Sprintf("Starting %s-%s on %s", n.Type, n.Name, n.Addr))
 
+	// Check and create node_data directory
+	nodeDataDir := "node_data"
+	if _, err := os.Stat(nodeDataDir); os.IsNotExist(err) {
+		err := os.Mkdir(nodeDataDir, 0755) // Create directory with read/write/execute for user, and read/execute for group and others
+		if err != nil {
+			n.Print(fmt.Sprintf("Error creating data directory: %v", err))
+			return
+		}
+	}
+
+	// Create a data file for the node
+	filename := fmt.Sprintf("%s-%s.data", n.Type, n.Name) // Change extension based on your data format
+	filepath := filepath.Join(nodeDataDir, filename)
+	file, err := os.Create(filepath)
+	if err != nil {
+		n.Print(fmt.Sprintf("Error creating data file: %v", err))
+		return
+	}
+	file.Close()
+
+	// Start RPC
 	listener, err := net.Listen("tcp", n.Addr)
 	if err != nil {
 		n.Print(fmt.Sprintf("Error starting RPC server: %v", err))
