@@ -9,6 +9,15 @@ import (
 
 func ClearNodeDataDir() error {
 	dir := "node_data"
+	if _, err := os.Stat(dir); os.IsNotExist(err) {
+		// Create directory if not exist
+		if err := os.Mkdir(dir, 0755); err != nil {
+			return fmt.Errorf("error creating node_data directory: %v", err)
+		}
+	} else if err != nil {
+		return fmt.Errorf("error checking node_data directory: %v", err)
+	}
+
 	files, err := os.ReadDir(dir)
 	if err != nil {
 		return fmt.Errorf("error reading node_data directory: %v", err)

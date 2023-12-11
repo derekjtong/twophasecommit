@@ -249,7 +249,7 @@ func (n *Node) monitorTransactionStatus(transactionID uuid.UUID, transactions []
 			n.Print("monitorTransactionStatus paused to simulate crash...")
 			continue
 		}
-		foundStatus := false
+		// foundStatus := false
 		time.Sleep(500 * time.Millisecond) // Delay between queries
 		select {
 		case <-n.stopMonitoring:
@@ -289,7 +289,7 @@ func (n *Node) monitorTransactionStatus(transactionID uuid.UUID, transactions []
 				// Check if status has been updated in the local log
 				if updatedStatus, updated := n.checkLocalLogForStatus(transactionID); updated {
 					n.Print(fmt.Sprintf("Updated transaction %s status in local log: %s", transactionID, updatedStatus))
-					foundStatus = true
+					// foundStatus = true
 					break // Break out of the inner loop if status is updated
 				}
 
@@ -297,9 +297,9 @@ func (n *Node) monitorTransactionStatus(transactionID uuid.UUID, transactions []
 			}
 
 			// Check if the status was found in this iteration
-			if foundStatus {
-				break // Break out of the infinite loop
-			}
+			// if foundStatus {
+			// 	break // Break out of the infinite loop
+			// }
 		}
 	}
 }
