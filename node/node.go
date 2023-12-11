@@ -6,6 +6,7 @@ import (
 	"net/rpc"
 	"os"
 	"path/filepath"
+	"sync"
 
 	"github.com/google/uuid"
 )
@@ -33,10 +34,13 @@ type Node struct {
 
 	// Participant Related
 	p_coordinatorClient                *rpc.Client
+	commitMutex                        sync.Mutex
 	promisedCommit                     bool
 	transactionNewBalance              float64
 	sleepBeforeRespondingToCoordinator bool
 	sleepAfterRespondingToCoordinator  bool
+	rejectIncoming                     bool
+	stopMonitoring                     chan bool
 }
 
 func NewParticipant(addr string, name string) (*Node, error) {
@@ -169,7 +173,7 @@ func (n *Node) LogTransaction(phase string, transactionID uuid.UUID) {
 	}
 	defer file.Close()
 
-	logEntry := fmt.Sprintf("TID [%s] - %s\n", transactionID, phase)
+	logEntry := fmt.Sprintf("%s - %s\n", transactionID, phase)
 
 	if _, err := file.WriteString(logEntry); err != nil {
 		fmt.Printf("Error writing to log file: %v\n", err)

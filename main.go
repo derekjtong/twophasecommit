@@ -9,6 +9,8 @@ import (
 	"strings"
 	"twophasecommit/node"
 	"twophasecommit/utils"
+
+	"github.com/google/uuid"
 )
 
 func main() {
@@ -21,12 +23,47 @@ func main() {
 		startServer()
 	} else if os.Args[1] == "client" {
 		startClient()
+	} else if os.Args[1] == "test" {
+		testing()
 	} else {
 		fmt.Println("Usage: go run main.go [server|client]")
 		os.Exit(1)
 	}
 }
 
+func testing() {
+	logFile := "node_log/Participant-A.log"
+	file, err := os.Open(logFile)
+	if err != nil {
+		fmt.Printf("Error opening log file: %v\n", err)
+		return
+	}
+	defer file.Close()
+
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		var tidStr, status string
+		line := scanner.Text()
+		_, err := fmt.Sscanf(line, "%s - %s", &tidStr, &status)
+		if err != nil {
+			fmt.Printf("Error parsing line: %v\n", err)
+			continue
+		}
+
+		tidStr = strings.Trim(tidStr, "]") // Remove trailing ']'
+		tid, err := uuid.Parse(tidStr)
+		if err != nil {
+			fmt.Printf("Error parsing UUID: %v\n", err)
+			continue
+		}
+
+		fmt.Printf("%s %s\n", tid, status)
+	}
+
+	if err := scanner.Err(); err != nil {
+		fmt.Printf("Error reading log file: %v\n", err)
+	}
+}
 func startServer() {
 	// Start Coordinator
 	err := utils.ClearNodeDataDir()
@@ -260,7 +297,7 @@ func startClient() {
 				continue
 			}
 			if len(parts) != 2 {
-				fmt.Printf("Usage: deposit <amout>")
+				fmt.Printf("Usage: deposit <amount>\n")
 				continue
 			}
 			amount, err := strconv.ParseFloat(parts[1], 64)
@@ -474,6 +511,46 @@ func startClient() {
 			}
 
 			fmt.Println("Transaction successfully processed.")
+		case "delay":
+			if currentType != "Participant" {
+				fmt.Println("SimulateDelay command is only available for participants.")
+				continue
+			}
+
+			var sleepBefore, sleepAfter bool
+			var choice string
+
+			fmt.Println("Choose when to simulate delay:")
+			fmt.Println("1: Before responding to coordinator")
+			fmt.Println("2: After responding to coordinator")
+			fmt.Println("3: No delay")
+			fmt.Print("Enter your choice (1, 2, or 3): ")
+			fmt.Scanln(&choice)
+
+			switch choice {
+			case "1":
+				sleepBefore = true
+			case "2":
+				sleepAfter = true
+			case "3":
+				// Both remain false
+			default:
+				fmt.Println("Invalid choice.")
+				continue
+			}
+
+			var req node.SimulateDelayRequest = node.SimulateDelayRequest{
+				SleepBefore: sleepBefore,
+				SleepAfter:  sleepAfter,
+			}
+			var res node.SimulateDelayResponse
+			if err := client.Call("Node.SimulateDelay", &req, &res); err != nil {
+				fmt.Printf("Error calling SimulateDelay RPC method: %v\n", err)
+				continue
+			}
+
+			fmt.Println("Delay simulation settings updated.")
+
 		default:
 			fmt.Println("Unknown command:", input)
 		}

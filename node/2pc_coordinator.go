@@ -3,6 +3,7 @@ package node
 import (
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -27,12 +28,11 @@ func (n *Node) ParticipantCoordinatorTransaction(req *ParticipantCoordinatorTran
 	n.Print(fmt.Sprintf("---Transaction ID: %s---", transactionID))
 
 	n.LogTransaction("PREPARE", transactionID)
-
 	// Step 1: Prepare Phase
 	n.Print("---Prepare phase---")
 	var combinedError string
 	for _, tx := range req.Transactions {
-		err := n.sendPrepare(tx.Name, tx.Amount, tx.Operation, transactionID)
+		err := n.sendPrepare(tx.Name, tx.Amount, tx.Operation, transactionID, req.Transactions)
 		if err != nil {
 			if combinedError != "" {
 				combinedError += "; "
@@ -43,12 +43,12 @@ func (n *Node) ParticipantCoordinatorTransaction(req *ParticipantCoordinatorTran
 	if combinedError != "" {
 		n.LogTransaction("ABORT", transactionID)
 		for _, txRollback := range req.Transactions {
-			n.sendRollback(txRollback.Name, transactionID)
+			n.sendAbort(txRollback.Name, transactionID)
 		}
 		return errors.New(combinedError)
 	}
-	n.LogTransaction("COMMIT", transactionID)
 
+	n.LogTransaction("COMMIT", transactionID)
 	// Step 2: Commit Phase
 	n.Print("---Commit phase---")
 	for _, tx := range req.Transactions {
@@ -58,31 +58,45 @@ func (n *Node) ParticipantCoordinatorTransaction(req *ParticipantCoordinatorTran
 	return nil
 }
 
-// Send prepare request
-func (n *Node) sendPrepare(name string, amount float64, operation string, transactionID uuid.UUID) error {
+// Send Prepare/CanCommit? request
+func (n *Node) sendPrepare(name string, amount float64, operation string, transactionID uuid.UUID, transactions []Transaction) error {
 	n.Print("Request: CanCommit?")
+
 	req := ReceivePrepareRequest{
+		Transactions:  transactions,
 		TransactionID: transactionID,
 		Amount:        amount,
 		Operation:     operation,
 	}
 	var res ReceivePrepareResponse
-	client := n.c_participantClients[name].Client
 
-	// Send Prepare
-	err := client.Call("Node.ReceivePrepare", &req, &res)
-	if err != nil {
-		return err
-	}
-	if res.Response == "VoteAbort" {
+	// Channel to communicate the outcome of the RPC call
+	done := make(chan error, 1)
+
+	// Perform the RPC call in a goroutine
+	go func() {
+		err := n.c_participantClients[name].Client.Call("Node.ReceivePrepare", &req, &res)
+		done <- err
+	}()
+
+	// Implementing timeout using select
+	select {
+	case err := <-done:
+		if err != nil {
+			return err
+		}
+		if res.Response == "VoteAbort" {
+			return errors.New("vote aborted by participant")
+		} else if res.Response != "VoteCommit" {
+			return errors.New("received invalid response")
+		}
 		return nil
-	} else if res.Response == "VoteCommit" {
-		return nil
+	case <-time.After(5 * time.Second):
+		return errors.New("transaction aborted due to timeout")
 	}
-	return errors.New("received invalid response")
 }
 
-// Send commit
+// Send DoCommit
 func (n *Node) sendCommit(name string, transactionID uuid.UUID) {
 	n.Print("Request: DoCommit")
 	client := n.c_participantClients[name].Client
@@ -96,7 +110,8 @@ func (n *Node) sendCommit(name string, transactionID uuid.UUID) {
 	}
 }
 
-func (n *Node) sendRollback(name string, transactionID uuid.UUID) {
+// Send DoAbort
+func (n *Node) sendAbort(name string, transactionID uuid.UUID) {
 	n.Print("Request: DoAbort")
 	client := n.c_participantClients[name].Client
 	var req ReceiveAbortRequest = ReceiveAbortRequest{
@@ -105,6 +120,6 @@ func (n *Node) sendRollback(name string, transactionID uuid.UUID) {
 	var res ReceiveCommitResponse
 	err := client.Call("Node.ReceiveAbort", &req, &res)
 	if err != nil {
-		n.Print(fmt.Sprintf("Error rolling back: %v", err))
+		n.Print(fmt.Sprintf("Error aborting back: %v", err))
 	}
 }
